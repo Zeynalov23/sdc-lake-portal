@@ -1,0 +1,4 @@
+apiVersion: v2
+name: hello-world
+description: GitOps loop smoke test
+version: 0.1.0
