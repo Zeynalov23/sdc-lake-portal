@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:<your-username>/sdc-lake-portal.git
+    repoURL: git@github.com:Zeynalov23/sdc-lake-portal.git
     targetRevision: main
     path: apps/hello-world
   destination:
