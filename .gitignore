@@ -5,3 +5,14 @@ crash.log
 crash.*.log
 *.tfvars
 *.tfvars.json
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# os
+.DS_Store
+
+# build artifacts
+*.zip

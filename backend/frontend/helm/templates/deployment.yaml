@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DATA_SERVICE_URL
+              value: {{ .Values.dataServiceUrl }}
+            - name: API_GATEWAY_URL
+              value: {{ .Values.apiGatewayUrl }}
+            - name: API_GATEWAY_KEY
+              value: {{ .Values.apiGatewayKey }}
+            - name: TEST_USER_ID
+              value: {{ .Values.testUserId }}
+            - name: TEST_SOURCE_ROLE
+              value: {{ .Values.testSourceRole }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: app
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 3000

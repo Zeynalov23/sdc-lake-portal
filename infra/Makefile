@@ -24,12 +24,17 @@ bootstrap:
 
 # Start of session: bring up the cluster (~15 min)
 up:
-	@echo "--- Bringing up EKS cluster ---"
-	cd infra-cluster && terraform init && terraform apply -auto-approve
-	@echo ""
-	@echo "--- Configure kubectl ---"
+	@echo "--- Step 1: Bring up VPC + EKS cluster ---"
+	cd infra-cluster && terraform init && terraform apply \
+		-target=module.vpc \
+		-target=module.eks \
+		-auto-approve
+	@echo "--- Step 2: Configure kubectl ---"
 	cd infra-cluster && terraform output -raw configure_kubectl | bash
-	@echo ""
+	@echo "--- Step 3: Waiting for nodes to be ready ---"
+	kubectl wait --for=condition=Ready nodes --all --timeout=300s
+	@echo "--- Step 4: Apply remaining resources ---"
+	cd infra-cluster && terraform apply -auto-approve
 	@echo "--- Cluster ready ---"
 	kubectl get nodes
 

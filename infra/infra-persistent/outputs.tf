@@ -37,3 +37,23 @@ output "iam_role_usage_service_arn" {
 output "demo_data_bucket" {
   value = aws_s3_bucket.demo_data.bucket
 }
+
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.main.id
+}
+
+output "cognito_user_pool_client_id" {
+  value = aws_cognito_user_pool_client.frontend.id
+}
+
+output "cognito_identity_pool_id" {
+  value = aws_cognito_identity_pool.main.id
+}
+
+output "cognito_user_pool_endpoint" {
+  value = aws_cognito_user_pool.main.endpoint
+}
+
+output "cognito_domain" {
+  value = aws_cognito_user_pool_domain.main.domain
+}

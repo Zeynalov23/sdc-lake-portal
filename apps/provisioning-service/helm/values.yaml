@@ -1,0 +1,20 @@
+image:
+  repository: <your-account-id>.dkr.ecr.eu-west-1.amazonaws.com/sdc-lake-dev/provisioning-service
+  tag: latest
+
+sqs:
+  queueUrl: <your-sqs-queue-url>
+
+dynamodb:
+  tableName: sdc-lake-dev-resources
+
+cognito:
+  identityPoolId: eu-west-1:f503c011-d618-4943-9e74-ff62e63f352a
+  userPoolId: eu-west-1_TjHI7KEwu
+  userPoolClientId: 71j6ijo9v8ev1ejiinqtnfag61
+
+aws:
+  region: eu-west-1
+  accountId: <your-account-id>
+
+resourcePrefix: sdc-lake-dev
