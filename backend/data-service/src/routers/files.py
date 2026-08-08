@@ -136,7 +136,7 @@ def _build_authorized_key(
     *,
     allow_empty: bool = False,
 ) -> str:
-    """Build an S3 key without allowing the client to escape the space prefix."""
+    """Build an S3 key beneath the backend-owned space prefix."""
     if relative_key == "":
         if allow_empty:
             return space_prefix
@@ -147,7 +147,7 @@ def _build_authorized_key(
     if path.is_absolute() or ".." in path.parts:
         raise HTTPException(status_code=400, detail="Invalid object key")
 
-    normalized = path.as_posix().lstrip("./")
+    normalized = path.as_posix()
     if not normalized or normalized == ".":
         if allow_empty:
             return space_prefix
