@@ -5,6 +5,9 @@ image:
 dynamodb:
   tableName: sdc-lake-dev-resources
 
+s3:
+  # Shared data bucket; each space is isolated by the prefix spaces/<space-id>/
+  bucketName: sdc-lake-dev-demo-data
+
 aws:
   region: eu-west-1
-  accountId: <your-account-id>
