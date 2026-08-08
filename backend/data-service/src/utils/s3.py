@@ -1,15 +1,14 @@
 """
 S3 helpers for the data service.
-All operations go through S3 access points, never directly to buckets.
-Pod Identity provides the IAM credentials automatically.
+The data service uses one shared bucket and isolates spaces by key prefix.
+EKS Pod Identity provides temporary AWS credentials automatically.
 """
 import os
 
 import boto3
 from botocore.config import Config
 
-_REGION     = os.environ.get("AWS_REGION", "eu-west-1")
-_ACCOUNT_ID = os.environ.get("AWS_ACCOUNT_ID", "")
+_REGION = os.environ.get("AWS_REGION", "eu-west-1")
 
 _s3 = boto3.client(
     "s3",
@@ -20,53 +19,63 @@ _s3 = boto3.client(
 _PRESIGNED_URL_EXPIRY = 3600  # 1 hour
 
 
-def list_objects(access_point_arn: str, prefix: str = "") -> list[dict]:
-    """
-    List objects in a bucket via an access point.
-    Returns simplified file metadata.
-    """
-    paginator = _s3.get_paginator("list_objects_v2")
-    pages = paginator.paginate(
-        Bucket=access_point_arn,
-        Prefix=prefix,
-    )
+def list_objects(
+    bucket_name: str,
+    prefix: str,
+    continuation_token: str | None = None,
+    max_keys: int = 100,
+) -> dict:
+    """List one page of object metadata from a space prefix."""
+    params = {
+        "Bucket": bucket_name,
+        "Prefix": prefix,
+        "MaxKeys": max_keys,
+    }
+    if continuation_token:
+        params["ContinuationToken"] = continuation_token
 
-    objects = []
-    for page in pages:
-        for obj in page.get("Contents", []):
-            objects.append({
-                "key":          obj["Key"],
-                "size":         obj["Size"],
-                "lastModified": obj["LastModified"].isoformat(),
-                "etag":         obj["ETag"].strip('"'),
-            })
+    response = _s3.list_objects_v2(**params)
 
-    return objects
+    objects = [
+        {
+            "key": obj["Key"],
+            "size": obj["Size"],
+            "lastModified": obj["LastModified"].isoformat(),
+            "etag": obj["ETag"].strip('"'),
+        }
+        for obj in response.get("Contents", [])
+    ]
+
+    return {
+        "objects": objects,
+        "nextToken": response.get("NextContinuationToken"),
+        "isTruncated": response.get("IsTruncated", False),
+    }
 
 
-def generate_presigned_download_url(
-    access_point_arn: str, key: str
-) -> str:
-    """Generate a presigned GET URL for downloading a file."""
+def generate_presigned_download_url(bucket_name: str, key: str) -> str:
+    """Generate a presigned GET URL for downloading one object."""
     return _s3.generate_presigned_url(
-        ClientMethod = "get_object",
-        Params       = {"Bucket": access_point_arn, "Key": key},
-        ExpiresIn    = _PRESIGNED_URL_EXPIRY,
+        ClientMethod="get_object",
+        Params={"Bucket": bucket_name, "Key": key},
+        ExpiresIn=_PRESIGNED_URL_EXPIRY,
     )
 
 
 def generate_presigned_upload_url(
-    access_point_arn: str, key: str, content_type: str = "application/octet-stream"
+    bucket_name: str,
+    key: str,
+    content_type: str = "application/octet-stream",
 ) -> str:
-    """Generate a presigned PUT URL for uploading a file."""
+    """Generate a presigned PUT URL for uploading one object."""
     return _s3.generate_presigned_url(
-        ClientMethod = "put_object",
-        Params       = {
-            "Bucket":      access_point_arn,
-            "Key":         key,
+        ClientMethod="put_object",
+        Params={
+            "Bucket": bucket_name,
+            "Key": key,
             "ContentType": content_type,
         },
-        ExpiresIn = _PRESIGNED_URL_EXPIRY,
+        ExpiresIn=_PRESIGNED_URL_EXPIRY,
     )
 
 
@@ -78,8 +87,8 @@ def get_bucket_versioning(bucket_name: str) -> str:
 
 def set_bucket_versioning(bucket_name: str, enabled: bool) -> None:
     _s3.put_bucket_versioning(
-        Bucket                  = bucket_name,
-        VersioningConfiguration = {
+        Bucket=bucket_name,
+        VersioningConfiguration={
             "Status": "Enabled" if enabled else "Suspended"
         },
     )
