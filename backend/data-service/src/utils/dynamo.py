@@ -3,6 +3,7 @@ DynamoDB read helpers for the data service.
 The table uses a single-table model with deterministic PK/SK access paths.
 """
 import os
+from typing import Optional
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -26,14 +27,14 @@ def get_user_spaces(user_id: str) -> list[dict]:
     return get_user_access(user_id)
 
 
-def get_space_metadata(space_id: str) -> dict | None:
+def get_space_metadata(space_id: str) -> Optional[dict]:
     response = _table.get_item(
         Key={"PK": f"SPACE#{space_id}", "SK": "METADATA"}
     )
     return response.get("Item")
 
 
-def get_membership(user_id: str, space_id: str) -> dict | None:
+def get_membership(user_id: str, space_id: str) -> Optional[dict]:
     """Return one exact space membership using a strongly bounded key lookup."""
     response = _table.get_item(
         Key={
@@ -44,7 +45,7 @@ def get_membership(user_id: str, space_id: str) -> dict | None:
     return response.get("Item")
 
 
-def get_data_product(space_id: str, data_product_id: str) -> dict | None:
+def get_data_product(space_id: str, data_product_id: str) -> Optional[dict]:
     response = _table.get_item(
         Key={
             "PK": f"SPACE#{space_id}",
@@ -58,7 +59,7 @@ def get_data_product_consumer(
     user_id: str,
     space_id: str,
     data_product_id: str,
-) -> dict | None:
+) -> Optional[dict]:
     """Return exact consumer access for one root-level data product."""
     response = _table.get_item(
         Key={
