@@ -1,8 +1,8 @@
 """
 Spaces router.
-GET /spaces         — list all spaces the user has access to
-GET /spaces/:id     — get metadata for a specific space
-PATCH /spaces/:id   — toggle versioning on/off
+GET   /spaces                    - list all spaces the user can access
+GET   /spaces/:id                - get metadata for a specific space
+PATCH /spaces/:id/versioning     - toggle versioning on/off
 """
 import logging
 from typing import Annotated
@@ -10,10 +10,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from src.utils.auth   import get_current_user
-from src.utils        import dynamo, s3 as s3_util
+from src.utils.auth import get_current_user
+from src.utils.authz import SpacePermission, require_space_permission
+from src.utils import dynamo, s3 as s3_util
 
-logger = APIRouter()
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -23,40 +24,31 @@ class VersioningUpdate(BaseModel):
 
 @router.get("")
 def list_spaces(user: Annotated[dict, Depends(get_current_user)]):
-    """
-    Returns all spaces the user has access to, grouped by their source role.
-    Frontend uses this to populate the space picker.
-    """
-    user_id = user["userId"]
+    """Return all spaces for which the user has an active space membership."""
+    items = dynamo.get_user_access(user["userId"])
 
-    items = dynamo.get_user_spaces(user_id)
-
-    # userId-index returns both membership rows (PK=USER#...) and space
-    # metadata rows that also carry userId=ownerId (PK=SPACE#...). DynamoDB
-    # always projects base-table PK/SK into GSI results, so this filter is
-    # safe and keeps metadata rows from being treated as memberships.
-    relevant = [
-        m for m in items
-        if m.get("PK", "").startswith("USER#")
-        and m.get("status") == "READY"
+    memberships = [
+        item
+        for item in items
+        if item.get("SK", "").startswith("MEMBER#")
+        and item.get("status", "ACTIVE") == "ACTIVE"
     ]
 
     spaces = []
-    for membership in relevant:
+    for membership in memberships:
         space_id = membership["spaceId"]
         metadata = dynamo.get_space_metadata(space_id)
-        if not metadata:
+        if not metadata or metadata.get("status") != "READY":
             continue
 
         spaces.append({
-            "spaceId":        space_id,
-            "type":           membership.get("type", "OWNER"),
-            "role":           membership.get("role", "writer"),
-            "accessPointArn": membership.get("accessPointArn"),
-            "bucketName":     metadata.get("bucketName"),
-            "status":         metadata.get("status"),
-            "tier":           metadata.get("tier"),
-            "createdAt":      metadata.get("createdAt"),
+            "spaceId": space_id,
+            "role": membership.get("role"),
+            "bucketName": metadata.get("bucketName"),
+            "status": metadata.get("status"),
+            "tier": metadata.get("tier"),
+            "owner": metadata.get("owner"),
+            "createdAt": metadata.get("createdAt"),
         })
 
     return {"spaces": spaces}
@@ -67,13 +59,10 @@ def get_space(
     space_id: str,
     user: Annotated[dict, Depends(get_current_user)],
 ):
-    """Get metadata for a specific space including versioning status."""
-    user_id = user["userId"]
-
-    # Verify user has access to this space
-    membership = dynamo.get_membership(user_id, space_id)
-    if not membership or membership.get("status") != "READY":
-        raise HTTPException(status_code=403, detail="Access denied")
+    """Get space metadata. Any active space role with READ access may view it."""
+    membership = require_space_permission(
+        user["userId"], space_id, SpacePermission.READ
+    )
 
     metadata = dynamo.get_space_metadata(space_id)
     if not metadata:
@@ -82,16 +71,14 @@ def get_space(
     versioning = s3_util.get_bucket_versioning(metadata["bucketName"])
 
     return {
-        "spaceId":        space_id,
-        "bucketName":     metadata["bucketName"],
-        "status":         metadata["status"],
-        "tier":           metadata["tier"],
-        "owner":          metadata["owner"],
-        "createdAt":      metadata["createdAt"],
-        "versioning":     versioning,
-        "role":           membership.get("role"),
-        "type":           membership.get("type"),
-        "accessPointArn": membership.get("accessPointArn"),
+        "spaceId": space_id,
+        "bucketName": metadata["bucketName"],
+        "status": metadata["status"],
+        "tier": metadata["tier"],
+        "owner": metadata["owner"],
+        "createdAt": metadata["createdAt"],
+        "versioning": versioning,
+        "role": membership.get("role"),
     }
 
 
@@ -101,15 +88,10 @@ def update_versioning(
     body: VersioningUpdate,
     user: Annotated[dict, Depends(get_current_user)],
 ):
-    """Toggle versioning on/off. Writers only."""
-    user_id = user["userId"]
-
-    membership = dynamo.get_membership(user_id, space_id)
-    if not membership or membership.get("status") != "READY":
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    if membership.get("role") != "writer":
-        raise HTTPException(status_code=403, detail="Only writers can change versioning")
+    """Toggle versioning. Only OWNER and DEPUTY have CONFIGURE permission."""
+    require_space_permission(
+        user["userId"], space_id, SpacePermission.CONFIGURE
+    )
 
     metadata = dynamo.get_space_metadata(space_id)
     if not metadata:
@@ -118,6 +100,6 @@ def update_versioning(
     s3_util.set_bucket_versioning(metadata["bucketName"], body.enabled)
 
     return {
-        "spaceId":    space_id,
+        "spaceId": space_id,
         "versioning": "Enabled" if body.enabled else "Suspended",
     }
