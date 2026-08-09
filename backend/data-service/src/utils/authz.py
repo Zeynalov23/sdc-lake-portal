@@ -1,12 +1,12 @@
 """Central authorization rules for spaces and data products."""
-from enum import StrEnum
+from enum import Enum
 
 from fastapi import HTTPException
 
 from src.utils import dynamo
 
 
-class SpacePermission(StrEnum):
+class SpacePermission(str, Enum):
     READ = "read_space"
     WRITE = "write_space"
     CONFIGURE = "configure_space"
