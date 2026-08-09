@@ -1,7 +1,7 @@
 """
-POST /spaces handler
+POST /spaces handler.
 Creates a new space request in DynamoDB with PENDING status.
-Provisioning service picks it up via DynamoDB Streams → SQS.
+Provisioning service picks it up via DynamoDB Streams -> SQS.
 
 Expected body:
 {
@@ -24,55 +24,52 @@ _REGION = os.environ.get("AWS_REGION", "eu-west-1")
 
 
 def handle_create(body: dict) -> dict:
-    # Validate input
     validation.require_fields(body, ["spaceId", "owner", "ownerId", "tier"])
     validation.validate_space_name(body["spaceId"])
     validation.validate_tier(body["tier"])
 
     space_id = body["spaceId"]
     owner_id = body["ownerId"]
-    region   = body.get("region", _REGION)
+    region = body.get("region", _REGION)
 
-    # Check space doesn't already exist
     existing = dynamo.get_item(f"SPACE#{space_id}", "METADATA")
     if existing:
         return bad_request(f"Space '{space_id}' already exists")
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Write space metadata record
     dynamo.put_item({
-        "PK":        f"SPACE#{space_id}",
-        "SK":        "METADATA",
-        "spaceId":   space_id,
-        "owner":     body["owner"],
-        "ownerId":   owner_id,
-        "tier":      body["tier"],
-        "region":    region,
-        "status":    "PENDING",
+        "PK": f"SPACE#{space_id}",
+        "SK": "METADATA",
+        "spaceId": space_id,
+        "owner": body["owner"],
+        "ownerId": owner_id,
+        "tier": body["tier"],
+        "region": region,
+        "status": "PENDING",
         "eventType": "CREATE_SPACE",
         "requestId": str(uuid.uuid4()),
         "createdAt": now,
         "updatedAt": now,
-        "userId":    owner_id,
     })
 
-    # Write owner membership record
+    # Authorization is modeled under the space partition. The owner gets a
+    # regular membership record with the OWNER role instead of a special
+    # writer IAM role / Cognito mapping.
     dynamo.put_item({
-        "PK":             f"USER#{owner_id}",
-        "SK":             f"SPACE#{space_id}#ROLE#writer",
-        "userId":         owner_id,
-        "spaceId":        space_id,
-        "type":           "OWNER",
-        "role":           "writer",
-        "sourceRole":     f"space-{space_id}-gw",
-        "status":         "PENDING",
-        "createdAt":      now,
-        "updatedAt":      now,
+        "PK": f"SPACE#{space_id}",
+        "SK": f"MEMBER#{owner_id}",
+        "userId": owner_id,
+        "spaceId": space_id,
+        "role": "OWNER",
+        "status": "PENDING",
+        "createdBy": owner_id,
+        "createdAt": now,
+        "updatedAt": now,
     })
 
     return created({
-        "message":  f"Space '{space_id}' creation requested",
-        "spaceId":  space_id,
-        "status":   "PENDING",
+        "message": f"Space '{space_id}' creation requested",
+        "spaceId": space_id,
+        "status": "PENDING",
     })
