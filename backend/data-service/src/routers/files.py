@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from src.utils.auth import get_current_user
-from src.utils import dynamo
+from src.utils.authz import SpacePermission, require_space_permission
 from src.utils import s3 as s3_util
 
 router = APIRouter()
@@ -36,7 +36,8 @@ def list_files(
     continuation_token: str | None = Query(default=None, alias="continuationToken"),
 ):
     """List one page of objects from the user's authorized space prefix."""
-    _get_membership(user, space_id)
+    require_space_permission(user["userId"], space_id, SpacePermission.READ)
+
     space_prefix = _space_prefix(space_id)
     requested_prefix = _build_authorized_key(space_prefix, prefix, allow_empty=True)
 
@@ -72,9 +73,9 @@ def get_download_url(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     """Generate a presigned GET URL for one file inside an authorized space."""
-    _get_membership(user, space_id)
-    object_key = _build_authorized_key(_space_prefix(space_id), key)
+    require_space_permission(user["userId"], space_id, SpacePermission.READ)
 
+    object_key = _build_authorized_key(_space_prefix(space_id), key)
     url = s3_util.generate_presigned_download_url(_DATA_BUCKET, object_key)
 
     return {
@@ -90,14 +91,8 @@ def get_upload_url(
     body: UploadRequest,
     user: Annotated[dict, Depends(get_current_user)],
 ):
-    """Generate a presigned PUT URL. Only writers may upload."""
-    membership = _get_membership(user, space_id)
-
-    if membership.get("role") != "writer":
-        raise HTTPException(
-            status_code=403,
-            detail="Read-only access — cannot upload to this space",
-        )
+    """Generate a presigned PUT URL. Requires space-level write permission."""
+    require_space_permission(user["userId"], space_id, SpacePermission.WRITE)
 
     object_key = _build_authorized_key(_space_prefix(space_id), body.key)
     url = s3_util.generate_presigned_upload_url(
@@ -118,13 +113,6 @@ def get_upload_url(
 # ---------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------
-def _get_membership(user: dict, space_id: str) -> dict:
-    membership = dynamo.get_membership(user["userId"], space_id)
-    if not membership or membership.get("status") != "READY":
-        raise HTTPException(status_code=403, detail="Access denied")
-    return membership
-
-
 def _space_prefix(space_id: str) -> str:
     """The backend, never the client, owns the authorization boundary."""
     return f"spaces/{space_id}/"
