@@ -22,8 +22,6 @@ spec:
           env:
             - name: DYNAMODB_TABLE
               value: {{ .Values.dynamodb.tableName }}
-            - name: S3_BUCKET
-              value: {{ .Values.s3.bucketName }}
             - name: AWS_REGION
               value: {{ .Values.aws.region }}
           readinessProbe:
