@@ -48,8 +48,13 @@ else
 fi
 
 # Region is not part of the credentials, but the containers need it.
-grep -q '^AWS_REGION=' .env.aws 2>/dev/null || \
+if ! grep -q '^AWS_REGION=' .env.aws 2>/dev/null; then
   echo "AWS_REGION=${AWS_REGION:-eu-west-1}" >> .env.aws
+fi
+# botocore reads AWS_DEFAULT_REGION for clients created without region_name.
+if ! grep -q '^AWS_DEFAULT_REGION=' .env.aws 2>/dev/null; then
+  echo "AWS_DEFAULT_REGION=${AWS_REGION:-eu-west-1}" >> .env.aws
+fi
 
 echo "--- verifying ---"
 aws sts get-caller-identity --query Arn --output text

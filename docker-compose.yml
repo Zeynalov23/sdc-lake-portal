@@ -27,6 +27,9 @@ services:
       - .env.aws
     environment:
       AWS_REGION: ${AWS_REGION:-eu-west-1}
+      # botocore's implicit region lookup reads AWS_DEFAULT_REGION; AWS_REGION
+      # alone is not enough for a client created without region_name.
+      AWS_DEFAULT_REGION: ${AWS_REGION:-eu-west-1}
       DYNAMODB_TABLE: ${DYNAMODB_TABLE}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
@@ -49,6 +52,7 @@ services:
       - .env.aws
     environment:
       AWS_REGION: ${AWS_REGION:-eu-west-1}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-eu-west-1}
       DYNAMODB_TABLE: ${DYNAMODB_TABLE}
       SQS_QUEUE_URL: ${SQS_QUEUE_URL}
       RESOURCE_PREFIX: ${RESOURCE_PREFIX:-sdc-lake-dev}

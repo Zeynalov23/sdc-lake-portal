@@ -37,7 +37,7 @@ _SQS_QUEUE_URL = os.environ["SQS_QUEUE_URL"]
 _POLL_WAIT_SECS = int(os.environ.get("POLL_WAIT_SECONDS", "20"))
 _HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")
 
-_sqs = boto3.client("sqs")
+_sqs = boto3.client("sqs", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
 _deserializer = boto3.dynamodb.types.TypeDeserializer()
 
 PROCESSORS = {

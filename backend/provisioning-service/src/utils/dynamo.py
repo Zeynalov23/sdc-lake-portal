@@ -8,7 +8,11 @@ from datetime import datetime, timezone
 import boto3
 
 _TABLE_NAME = os.environ["DYNAMODB_TABLE"]
-_dynamodb   = boto3.resource("dynamodb")
+
+# Explicit region: botocore's implicit lookup reads AWS_DEFAULT_REGION rather
+# than AWS_REGION, so leaving it out fails in containers that look fine.
+_REGION     = os.environ.get("AWS_REGION", "eu-west-1")
+_dynamodb   = boto3.resource("dynamodb", region_name=_REGION)
 _table      = _dynamodb.Table(_TABLE_NAME)
 
 

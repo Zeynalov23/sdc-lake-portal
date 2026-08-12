@@ -11,7 +11,13 @@ from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 
 _TABLE_NAME = os.environ["DYNAMODB_TABLE"]
-_dynamodb = boto3.resource("dynamodb")
+
+# region_name is passed explicitly rather than left to the environment.
+# botocore's implicit lookup reads AWS_DEFAULT_REGION, not AWS_REGION, which
+# is an easy way to get NoRegionError in a container that looks correctly
+# configured. Being explicit removes the ambiguity everywhere this runs.
+_REGION = os.environ.get("AWS_REGION", "eu-west-1")
+_dynamodb = boto3.resource("dynamodb", region_name=_REGION)
 _table = _dynamodb.Table(_TABLE_NAME)
 
 
