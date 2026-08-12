@@ -34,26 +34,43 @@ def list_files(
     continuation_token: str | None = Query(default=None, alias="continuationToken"),
 ):
     """List one page of objects from a space bucket."""
-    authz.require_space_permission(
-        user["userId"], space_id, authz.SpacePermission.READ
-    )
-    bucket_name = _get_bucket_name(space_id)
     requested_prefix = _validate_relative_key(prefix, allow_empty=True)
 
-    result = s3_util.list_objects(
-        bucket_name=bucket_name,
-        prefix=requested_prefix,
-        continuation_token=continuation_token,
-        max_keys=_MAX_PAGE_SIZE,
+    # Never pass the caller's prefix straight to S3 — intersect it with what
+    # they are allowed to see first. A product consumer asking for "" must
+    # get their products, not the whole space.
+    allowed_prefixes = authz.authorize_list(
+        user["userId"], space_id, requested_prefix
     )
+    bucket_name = _get_bucket_name(space_id)
+
+    objects = []
+    next_token = None
+    truncated = False
+
+    # A space member always resolves to exactly one prefix, so pagination
+    # works normally. A product consumer listing the space root may span
+    # several prefixes; we return the first page of each rather than
+    # inventing a composite cursor.
+    for allowed in allowed_prefixes:
+        result = s3_util.list_objects(
+            bucket_name=bucket_name,
+            prefix=allowed,
+            continuation_token=continuation_token if len(allowed_prefixes) == 1 else None,
+            max_keys=_MAX_PAGE_SIZE,
+        )
+        objects.extend(result["objects"])
+        if len(allowed_prefixes) == 1:
+            next_token = result["nextToken"]
+            truncated = result["isTruncated"]
 
     return {
         "spaceId": space_id,
         "prefix": prefix,
-        "files": result["objects"],
-        "count": len(result["objects"]),
-        "nextContinuationToken": result["nextToken"],
-        "isTruncated": result["isTruncated"],
+        "files": objects,
+        "count": len(objects),
+        "nextContinuationToken": next_token,
+        "isTruncated": truncated,
     }
 
 
@@ -64,11 +81,11 @@ def get_download_url(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     """Generate a presigned GET URL for one file in a space bucket."""
-    authz.require_space_permission(
-        user["userId"], space_id, authz.SpacePermission.READ
-    )
-    bucket_name = _get_bucket_name(space_id)
     object_key = _validate_relative_key(key)
+    # Checked against this exact key, so a product consumer cannot reach
+    # outside their folder by asking for a path they happen to know.
+    authz.authorize_read(user["userId"], space_id, object_key)
+    bucket_name = _get_bucket_name(space_id)
 
     url = s3_util.generate_presigned_download_url(bucket_name, object_key)
 
@@ -86,11 +103,9 @@ def get_upload_url(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     """Generate a presigned PUT URL. Space WRITE permission is required."""
-    authz.require_space_permission(
-        user["userId"], space_id, authz.SpacePermission.WRITE
-    )
-    bucket_name = _get_bucket_name(space_id)
     object_key = _validate_relative_key(body.key)
+    authz.authorize_write(user["userId"], space_id, object_key)
+    bucket_name = _get_bucket_name(space_id)
 
     url = s3_util.generate_presigned_upload_url(
         bucket_name,

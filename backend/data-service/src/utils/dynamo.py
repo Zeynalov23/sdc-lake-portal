@@ -68,3 +68,25 @@ def get_data_product_consumer(
         }
     )
     return response.get("Item")
+
+
+def list_user_product_grants(user_id: str, space_id: str) -> list:
+    """
+    Every active data-product consumer grant a user holds inside one space.
+
+    The consumer SK is DATAPRODUCT#{id}#CONSUMER#{user}, so it cannot be
+    filtered by user with begins_with. We go through the userId GSI instead
+    and narrow in code. Fine at this scale: a user holds few grants. If that
+    stops being true, add a sort key to the GSI rather than scanning more.
+    """
+    response = _table.query(
+        IndexName="userId-index",
+        KeyConditionExpression=Key("userId").eq(user_id),
+    )
+    wanted_pk = f"SPACE#{space_id}"
+    return [
+        item
+        for item in response.get("Items", [])
+        if item.get("PK") == wanted_pk
+        and "#CONSUMER#" in str(item.get("SK", ""))
+    ]

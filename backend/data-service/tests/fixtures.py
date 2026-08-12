@@ -20,7 +20,7 @@ SPACE_MEMBERSHIPS = {
         "PK": "SPACE#finance",
         "SK": "MEMBER#charlie",
         "userId": "charlie",
-        "role": "DEVELOPER",
+        "role": "PRODUCER",
         "status": "ACTIVE",
     },
     "david": {
