@@ -20,3 +20,4 @@ __pycache__/
 .env
 sdclake_fe
 sdclake_fe.pub
+.env.aws

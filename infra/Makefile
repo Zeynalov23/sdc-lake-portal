@@ -60,8 +60,15 @@ init:
 # Run from the repo root, not from infra/
 # ---------------------------------------------------------------
 dev-up:
+	cd .. && ./scripts/aws-creds.sh
 	cd .. && docker compose up --build -d
 	@echo "data-service on http://localhost:8000/docs"
+
+# Credentials are short lived. Run this and restart when calls start
+# failing with ExpiredToken.
+dev-creds:
+	cd .. && ./scripts/aws-creds.sh
+	cd .. && docker compose restart
 
 dev-down:
 	cd .. && docker compose down
