@@ -16,3 +16,7 @@ __pycache__/
 
 # build artifacts
 *.zip
+# local dev secrets
+.env
+sdclake_fe
+sdclake_fe.pub

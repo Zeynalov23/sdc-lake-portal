@@ -1,16 +1,17 @@
 """
 Shared AWS clients.
-Using module-level singletons so they're reused across processor calls.
+
+Module-level singletons: boto3 clients are thread-safe and cheap to reuse,
+but expensive to construct repeatedly.
+
+Only S3 remains. The IAM, s3control and cognito-identity clients went away
+with the per-space roles and access points.
 """
 import os
+
 import boto3
 
-REGION     = os.environ.get("AWS_REGION", "eu-west-1")
-ACCOUNT_ID = os.environ.get("AWS_ACCOUNT_ID", "")
-PREFIX     = os.environ.get("RESOURCE_PREFIX", "sdc-lake-dev")
+REGION = os.environ.get("AWS_REGION", "eu-west-1")
+PREFIX = os.environ.get("RESOURCE_PREFIX", "sdc-lake-dev")
 
-s3         = boto3.client("s3",           region_name=REGION)
-s3control  = boto3.client("s3control",    region_name=REGION)
-iam        = boto3.client("iam")
-sns        = boto3.client("sns",          region_name=REGION)
-cognito    = boto3.client("cognito-identity", region_name=REGION)
+s3 = boto3.client("s3", region_name=REGION)

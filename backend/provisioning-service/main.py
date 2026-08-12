@@ -1,8 +1,21 @@
 """
-Provisioning service — main entry point.
-Runs as a long-lived pod in EKS.
-Polls SQS, dispatches to the right processor, deletes message on success.
-Failed messages stay in SQS for retry (up to 3 times), then go to DLQ.
+Provisioning service.
+
+Long-lived pod. Polls SQS, dispatches to a processor, deletes the message on
+success. A failed message is left on the queue: SQS redelivers it after the
+visibility timeout, and after maxReceiveCount it lands in the DLQ.
+
+Liveness: there is no readiness probe here on purpose. Readiness controls
+whether a pod is in a Service's endpoint list, and this pod has no Service
+and takes no inbound traffic, so there is nothing for readiness to gate.
+
+Liveness does matter, but "the process is running" is the useless version of
+it. The failure that actually hurts is a worker still running while its poll
+loop is wedged - stuck on a socket with no timeout, or spinning on one
+message. So the loop touches a heartbeat file on every cycle and the probe
+checks its age. Note the heartbeat is written on empty receives too: an idle
+queue is healthy, and only marking it on processed messages would restart
+the pod in a loop whenever there is no work.
 """
 import json
 import logging
@@ -10,9 +23,9 @@ import os
 import time
 
 import boto3
+import boto3.dynamodb.types
 
-from src.processors import space, access, notification
-from src.utils import dynamo
+from src.processors import space
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,101 +33,83 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_SQS_QUEUE_URL  = os.environ["SQS_QUEUE_URL"]
-_POLL_WAIT_SECS = int(os.environ.get("POLL_WAIT_SECONDS", "20"))  # long polling
+_SQS_QUEUE_URL = os.environ["SQS_QUEUE_URL"]
+_POLL_WAIT_SECS = int(os.environ.get("POLL_WAIT_SECONDS", "20"))
+_HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/tmp/heartbeat")
+
 _sqs = boto3.client("sqs")
+_deserializer = boto3.dynamodb.types.TypeDeserializer()
 
 PROCESSORS = {
-    "CREATE_SPACE":        space.process,
-    "CREATE_ACCESS":       access.process,
-    "CREATE_NOTIFICATION": notification.process,
+    "CREATE_SPACE": space.process,
 }
 
 
-def _process_message(message: dict) -> None:
+def _touch_heartbeat() -> None:
+    with open(_HEARTBEAT_FILE, "w") as f:
+        f.write(str(time.time()))
+
+
+def _deserialize(image: dict) -> dict:
+    """DynamoDB stream images are typed JSON ({"S": "x"}); flatten them."""
+    return {k: _deserializer.deserialize(v) for k, v in image.items()}
+
+
+def _handle(message: dict) -> None:
     body = json.loads(message["Body"])
+    new_image = body.get("dynamodb", {}).get("NewImage", {})
+    if not new_image:
+        logger.warning("Message has no NewImage - skipping")
+        return
 
-    # DynamoDB Streams via EventBridge Pipes wraps the record
-    # Extract the actual DynamoDB new image
-    record     = body.get("dynamodb", {})
-    new_image  = record.get("NewImage", {})
-    event_type = new_image.get("eventType", {}).get("S", "")
-
-    logger.info("Processing event type: %s", event_type)
+    item = _deserialize(new_image)
+    event_type = item.get("eventType", "")
 
     processor = PROCESSORS.get(event_type)
     if not processor:
-        logger.warning("No processor for event type: %s — skipping", event_type)
+        # Expected and fine: every insert reaches this queue, including the
+        # member rows written alongside a space. Only some carry an
+        # eventType. Delete rather than retry something we will never handle.
+        logger.debug("No processor for eventType=%r - discarding", event_type)
         return
 
-    processor(new_image)
+    logger.info("Processing %s for space %s", event_type, item.get("spaceId"))
+    processor(item)
 
 
-def _deserialize_dynamo_item(item: dict) -> dict:
-    """Convert DynamoDB typed JSON to plain Python dict."""
-    deserializer = boto3.dynamodb.types.TypeDeserializer()
-    return {k: deserializer.deserialize(v) for k, v in item.items()}
-
-
-def run():
-    logger.info("Provisioning service started. Polling SQS: %s", _SQS_QUEUE_URL)
+def run() -> None:
+    logger.info("Provisioning service started, polling %s", _SQS_QUEUE_URL)
+    _touch_heartbeat()
 
     while True:
         try:
             response = _sqs.receive_message(
-                QueueUrl            = _SQS_QUEUE_URL,
-                MaxNumberOfMessages = 5,
-                WaitTimeSeconds     = _POLL_WAIT_SECS,  # long polling
-                VisibilityTimeout   = 300,               # 5 min to process
+                QueueUrl=_SQS_QUEUE_URL,
+                MaxNumberOfMessages=5,
+                WaitTimeSeconds=_POLL_WAIT_SECS,
+                VisibilityTimeout=300,
             )
 
-            messages = response.get("Messages", [])
-            if not messages:
-                continue
+            # Written before any message handling, so a poison message that
+            # crashes every attempt still shows a healthy loop - the DLQ is
+            # what deals with that, not a restart.
+            _touch_heartbeat()
 
-            for message in messages:
-                receipt_handle = message["ReceiptHandle"]
+            for message in response.get("Messages", []):
                 try:
-                    body       = json.loads(message["Body"])
-                    new_image  = body.get("dynamodb", {}).get("NewImage", {})
-                    item       = _deserialize_dynamo_item(new_image)
-                    event_type = item.get("eventType", "")
-
-                    logger.info(
-                        "Processing message — eventType=%s requestId=%s",
-                        event_type,
-                        item.get("requestId", "unknown"),
+                    _handle(message)
+                    _sqs.delete_message(
+                        QueueUrl=_SQS_QUEUE_URL,
+                        ReceiptHandle=message["ReceiptHandle"],
                     )
-
-                    processor = PROCESSORS.get(event_type)
-                    if not processor:
-                        logger.warning("No processor for event type: %s", event_type)
-                        _delete_message(receipt_handle)
-                        continue
-
-                    processor(item)
-
-                    # Success — delete from queue
-                    _delete_message(receipt_handle)
-                    logger.info("Message processed successfully")
-
                 except Exception:
                     logger.exception(
-                        "Failed to process message — leaving in queue for retry"
+                        "Failed to process message - leaving it queued for retry"
                     )
-                    # Don't delete — SQS will redeliver after visibility timeout
-                    # After maxReceiveCount (3) it goes to DLQ
 
         except Exception:
-            logger.exception("SQS polling error — retrying in 5s")
+            logger.exception("SQS polling error - retrying in 5s")
             time.sleep(5)
-
-
-def _delete_message(receipt_handle: str) -> None:
-    _sqs.delete_message(
-        QueueUrl      = _SQS_QUEUE_URL,
-        ReceiptHandle = receipt_handle,
-    )
 
 
 if __name__ == "__main__":

@@ -55,3 +55,16 @@ down:
 init:
 	cd infra-persistent && terraform init
 	cd infra-cluster && terraform init
+# ---------------------------------------------------------------
+# Local development (docker compose, real AWS)
+# Run from the repo root, not from infra/
+# ---------------------------------------------------------------
+dev-up:
+	cd .. && docker compose up --build -d
+	@echo "data-service on http://localhost:8000/docs"
+
+dev-down:
+	cd .. && docker compose down
+
+dev-logs:
+	cd .. && docker compose logs -f
