@@ -3,9 +3,11 @@ DynamoDB read helpers for the data service.
 The table uses a single-table model with deterministic PK/SK access paths.
 """
 import os
+from datetime import datetime, timezone
 from typing import Optional
 
 import boto3
+from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 
 _TABLE_NAME = os.environ["DYNAMODB_TABLE"]
@@ -90,3 +92,84 @@ def list_user_product_grants(user_id: str, space_id: str) -> list:
         if item.get("PK") == wanted_pk
         and "#CONSUMER#" in str(item.get("SK", ""))
     ]
+
+
+class SpaceAlreadyExists(Exception):
+    """Raised when a space id is taken. Surfaced by the router as a 409."""
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def create_space(
+    space_id: str,
+    owner_id: str,
+    owner_email: Optional[str],
+    tier: str,
+) -> None:
+    """
+    Write the space request and its owner membership in one transaction.
+
+    Two invariants come from the database rather than from application code:
+
+      * attribute_not_exists(PK) on the metadata item means a duplicate space
+        id fails atomically, with no check-then-write race between requests
+      * both items are written or neither is, so a space can never exist
+        without an owner, and an orphan member row can never point at a space
+        that was not created
+
+    ownerOid is stored on the metadata item as well as on the member row.
+    That is deliberate duplication: an attribute holds exactly one value, so
+    "one owner" is enforced by the shape of the data, while the member row
+    keeps permission lookups and member listing uniform. The transaction is
+    what keeps the two copies honest.
+    """
+    now = _now()
+    client = _table.meta.client
+
+    try:
+        client.transact_write_items(
+            TransactItems=[
+                {
+                    "Put": {
+                        "TableName": _TABLE_NAME,
+                        "Item": {
+                            "PK": f"SPACE#{space_id}",
+                            "SK": "METADATA",
+                            "spaceId": space_id,
+                            "ownerOid": owner_id,
+                            "ownerEmail": owner_email,
+                            "tier": tier,
+                            "status": "PENDING",
+                            "eventType": "CREATE_SPACE",
+                            "createdAt": now,
+                            "updatedAt": now,
+                        },
+                        "ConditionExpression": "attribute_not_exists(PK)",
+                    }
+                },
+                {
+                    "Put": {
+                        "TableName": _TABLE_NAME,
+                        "Item": {
+                            "PK": f"SPACE#{space_id}",
+                            "SK": f"MEMBER#{owner_id}",
+                            "spaceId": space_id,
+                            "userId": owner_id,
+                            "email": owner_email,
+                            "role": "OWNER",
+                            "status": "ACTIVE",
+                            "createdAt": now,
+                            "updatedAt": now,
+                        },
+                    }
+                },
+            ]
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "TransactionCanceledException":
+            reasons = e.response.get("CancellationReasons", [])
+            if any(r.get("Code") == "ConditionalCheckFailed" for r in reasons):
+                raise SpaceAlreadyExists(space_id) from e
+        raise
