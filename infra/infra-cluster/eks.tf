@@ -90,9 +90,3 @@ resource "aws_eks_pod_identity_association" "provisioning_service" {
   role_arn        = local.persistent_state.iam_role_provisioning_service_arn
 }
 
-resource "aws_eks_pod_identity_association" "usage_service" {
-  cluster_name    = module.eks.cluster_name
-  namespace       = "app"
-  service_account = "usage-service"
-  role_arn        = local.persistent_state.iam_role_usage_service_arn
-}

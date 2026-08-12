@@ -8,7 +8,6 @@ locals {
     "api-service",
     "data-service",
     "provisioning-service",
-    "usage-service",
   ]
 }
 

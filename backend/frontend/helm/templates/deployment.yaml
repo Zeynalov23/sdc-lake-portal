@@ -21,10 +21,6 @@ spec:
           env:
             - name: DATA_SERVICE_URL
               value: {{ .Values.dataServiceUrl }}
-            - name: API_GATEWAY_URL
-              value: {{ .Values.apiGatewayUrl }}
-            - name: API_GATEWAY_KEY
-              value: {{ .Values.apiGatewayKey }}
             - name: TEST_USER_ID
               value: {{ .Values.testUserId }}
             - name: TEST_SOURCE_ROLE

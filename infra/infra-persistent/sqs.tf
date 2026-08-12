@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
 # Provisioning queue
-# DynamoDB Streams fan-out Lambda puts messages here.
+# The EventBridge Pipe reads the DynamoDB stream and puts messages here.
 # Provisioning service pod consumes from this queue.
 # ---------------------------------------------------------------
 resource "aws_sqs_queue" "provisioning_dlq" {
@@ -27,22 +27,7 @@ resource "aws_sqs_queue" "provisioning" {
   }
 }
 
-# Allow DynamoDB Streams Lambda to send to SQS
-resource "aws_sqs_queue_policy" "provisioning" {
-  queue_url = aws_sqs_queue.provisioning.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowLambdaSend"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-        Action   = "sqs:SendMessage"
-        Resource = aws_sqs_queue.provisioning.arn
-      }
-    ]
-  })
-}
+# No queue policy: the EventBridge Pipe sends with its own IAM role, and for
+# SQS an identity-based policy is sufficient within the same account. The old
+# policy granted SendMessage to lambda.amazonaws.com for the fan-out Lambda
+# that no longer exists.

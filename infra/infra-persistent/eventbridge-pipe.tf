@@ -73,11 +73,6 @@ resource "aws_pipes_pipe" "dynamo_to_sqs" {
   }
 
   target = aws_sqs_queue.provisioning.arn
-  target_parameters {
-    sqs_queue_parameters {
-      message_group_id = "provisioning"
-    }
-  }
 
   tags = { Name = "${local.prefix}-dynamo-to-sqs" }
 }

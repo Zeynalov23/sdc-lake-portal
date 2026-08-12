@@ -58,11 +58,18 @@ resource "aws_iam_role_policy" "data_service" {
         ]
       },
       {
-        Sid    = "DynamoDBLookup"
+        # The data service is now the write path too: the write-lambda and
+        # API Gateway are gone, so space creation and member management go
+        # through this role. TransactWriteItems needs PutItem and UpdateItem
+        # on the table, not a separate action.
+        Sid    = "DynamoDBAccess"
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
           "dynamodb:Query",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
         ]
         Resource = [
           aws_dynamodb_table.resources.arn,
@@ -116,7 +123,7 @@ resource "aws_iam_role_policy" "provisioning_service" {
         Effect = "Allow"
         Action = [
           "s3:CreateBucket",
-          "s3:PutBucketPolicy",
+          "s3:PutBucketCORS",
           "s3:PutBucketVersioning",
           "s3:PutBucketTagging",
           "s3:PutBucketNotification",
@@ -127,18 +134,8 @@ resource "aws_iam_role_policy" "provisioning_service" {
         Resource = "arn:aws:s3:::${local.prefix}-space-*"
       },
       {
-        Sid    = "IAMCreateSpaceRoles"
-        Effect = "Allow"
-        Action = [
-          "iam:CreateRole",
-          "iam:AttachRolePolicy",
-          "iam:PutRolePolicy",
-          "iam:TagRole",
-          "iam:GetRole",
-        ]
-        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.prefix}-space-*"
-      },
-      {
+        # Least privilege follows the code: the per-space IAM roles, S3
+        # access points and SNS topics are gone, so those grants go too.
         Sid    = "DynamoDBStatusUpdate"
         Effect = "Allow"
         Action = [
@@ -146,72 +143,6 @@ resource "aws_iam_role_policy" "provisioning_service" {
           "dynamodb:GetItem",
         ]
         Resource = aws_dynamodb_table.resources.arn
-      },
-      {
-        Sid    = "SNSCreateNotifications"
-        Effect = "Allow"
-        Action = [
-          "sns:CreateTopic",
-          "sns:SetTopicAttributes",
-          "sns:TagResource",
-        ]
-        Resource = "arn:aws:sns:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:${local.prefix}-space-*"
-      }
-    ]
-  })
-}
-
-# ---------------------------------------------------------------
-# Usage service role
-# Needs: CloudWatch GetMetrics, S3 ListBuckets, DynamoDB write
-# ---------------------------------------------------------------
-resource "aws_iam_role" "usage_service" {
-  name               = "${local.prefix}-usage-service"
-  assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
-
-  tags = { Name = "${local.prefix}-usage-service" }
-}
-
-resource "aws_iam_role_policy" "usage_service" {
-  name = "usage-service-policy"
-  role = aws_iam_role.usage_service.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "CloudWatchMetrics"
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "S3ListBuckets"
-        Effect = "Allow"
-        Action = [
-          "s3:ListAllMyBuckets",
-          "s3:GetBucketLocation",
-          "s3:ListBucket",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "DynamoDBWriteUsage"
-        Effect = "Allow"
-        Action = [
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:GetItem",
-          "dynamodb:Query",
-        ]
-        Resource = [
-          aws_dynamodb_table.resources.arn,
-          "${aws_dynamodb_table.resources.arn}/index/*",
-        ]
       }
     ]
   })

@@ -2,14 +2,6 @@
 # Secrets Manager
 # Placeholder secrets — values filled manually after apply
 # ---------------------------------------------------------------
-resource "aws_secretsmanager_secret" "api_gateway_key" {
-  name                    = "${local.prefix}/api-gateway-key"
-  description             = "API Gateway key used by API service pod"
-  recovery_window_in_days = 0 # instant delete for dev
-
-  tags = { Name = "${local.prefix}/api-gateway-key" }
-}
-
 resource "aws_secretsmanager_secret" "app_config" {
   name                    = "${local.prefix}/app-config"
   description             = "General app config (region, table names, queue URLs)"

@@ -56,9 +56,3 @@ resource "kubernetes_service_account" "provisioning_service" {
   }
 }
 
-resource "kubernetes_service_account" "usage_service" {
-  metadata {
-    name      = "usage-service"
-    namespace = kubernetes_namespace.app.metadata[0].name
-  }
-}

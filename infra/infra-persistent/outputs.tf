@@ -30,10 +30,6 @@ output "iam_role_provisioning_service_arn" {
   value = aws_iam_role.provisioning_service.arn
 }
 
-output "iam_role_usage_service_arn" {
-  value = aws_iam_role.usage_service.arn
-}
-
 output "demo_data_bucket" {
   value = aws_s3_bucket.demo_data.bucket
 }

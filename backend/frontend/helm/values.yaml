@@ -3,7 +3,5 @@ image:
   tag: latest
 
 dataServiceUrl: "http://data-service.app.svc.cluster.local"
-apiGatewayUrl:  "<your-api-gateway-url>"
-apiGatewayKey:  "<your-api-gateway-key>"
 testUserId:     "test-user-123"
 testSourceRole: "space-test-gw"
