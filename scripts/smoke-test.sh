@@ -70,4 +70,55 @@ else
   echo "    expected 403, got ${code}"; exit 1
 fi
 
+echo "--> adding a consumer"
+curl -sf -X POST "${API}/spaces/${SPACE_ID}/members" \
+  -H "Content-Type: application/json" -H "X-Dev-User: ${USER_ID}" \
+  -d '{"email":"dave@example.com","role":"CONSUMER"}' > /dev/null
+echo "    dave added"
+
+echo "--> the consumer can read but not write"
+code=$(curl -s -o /dev/null -w '%{http_code}' \
+  "${API}/spaces/${SPACE_ID}/files" -H "X-Dev-User: dev-dave")
+[ "${code}" = "200" ] || { echo "    expected 200 reading, got ${code}"; exit 1; }
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "${API}/spaces/${SPACE_ID}/files/upload" \
+  -H "Content-Type: application/json" -H "X-Dev-User: dev-dave" \
+  -d '{"key":"sales/nope.txt","content_type":"text/plain"}')
+[ "${code}" = "403" ] || { echo "    consumer could write: got ${code}"; exit 1; }
+echo "    read 200, write 403"
+
+echo "--> the consumer cannot manage members"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "${API}/spaces/${SPACE_ID}/members" \
+  -H "Content-Type: application/json" -H "X-Dev-User: dev-dave" \
+  -d '{"email":"eve@example.com","role":"CONSUMER"}')
+[ "${code}" = "403" ] || { echo "    consumer managed members: got ${code}"; exit 1; }
+echo "    403"
+
+echo "--> deputy assignment is limited to one"
+curl -sf -X PUT "${API}/spaces/${SPACE_ID}/deputy" \
+  -H "Content-Type: application/json" -H "X-Dev-User: ${USER_ID}" \
+  -d '{"email":"bob@example.com"}' > /dev/null
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+  "${API}/spaces/${SPACE_ID}/deputy" \
+  -H "Content-Type: application/json" -H "X-Dev-User: ${USER_ID}" \
+  -d '{"email":"carol@example.com"}')
+[ "${code}" = "409" ] || { echo "    second deputy accepted: got ${code}"; exit 1; }
+echo "    second deputy rejected with 409"
+
+echo "--> the deputy has admin rights"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "${API}/spaces/${SPACE_ID}/members" \
+  -H "Content-Type: application/json" -H "X-Dev-User: dev-bob" \
+  -d '{"email":"frank@example.com","role":"PRODUCER"}')
+[ "${code}" = "201" ] || { echo "    deputy could not add a member: got ${code}"; exit 1; }
+echo "    deputy added a member"
+
+echo "--> the owner cannot be removed"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+  "${API}/spaces/${SPACE_ID}/members/${USER_ID}" -H "X-Dev-User: ${USER_ID}")
+[ "${code}" = "409" ] || { echo "    owner was removable: got ${code}"; exit 1; }
+echo "    409"
+
 echo "--> all checks passed"

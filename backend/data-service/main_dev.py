@@ -52,3 +52,23 @@ logger.warning(
     "AUTHENTICATION DISABLED - local dev entry point. "
     "Identity comes from the X-Dev-User header."
 )
+
+
+# Microsoft Graph needs a client secret and admin consent, which is more setup
+# than a local run should require. Fake the directory so member endpoints are
+# usable with curl: any address resolves to a stable id derived from it, which
+# is enough to exercise the grant logic.
+if os.environ.get("DEV_FAKE_GRAPH", "true").lower() == "true":
+    from src.utils import graph as _graph
+
+    def _fake_find_user_by_email(email: str) -> dict:
+        email = email.strip().lower()
+        local_part = email.split("@")[0]
+        return {
+            "oid": f"dev-{local_part}",
+            "email": email,
+            "name": local_part.replace(".", " ").title(),
+        }
+
+    _graph.find_user_by_email = _fake_find_user_by_email
+    logger.warning("DIRECTORY LOOKUP FAKED - emails resolve to dev-<localpart>")
