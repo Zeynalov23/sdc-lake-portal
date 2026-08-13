@@ -42,7 +42,7 @@ export default function NewSpacePage() {
         <a href="/" className="text-sm text-gray-400 hover:text-gray-600">← Back to spaces</a>
         <h1 className="text-2xl font-semibold text-gray-900 mt-2">Create new space</h1>
         <p className="text-gray-500 text-sm mt-1">
-          A space is an isolated S3 bucket with its own access roles.
+          A space is an isolated S3 bucket. You become its owner, and can invite producers and consumers once it is ready.
         </p>
       </div>
 

@@ -9,6 +9,23 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
+// Who may write is decided by the API, not here - this only chooses what to
+// show. Hiding the upload button for a reader is a courtesy; the request
+// would be refused by authz either way.
+const WRITE_ROLES = new Set(["OWNER", "DEPUTY", "PRODUCER"])
+
+function canWrite(space: any): boolean {
+  return space.scope === "SPACE" && WRITE_ROLES.has(space.role)
+}
+
+function describeAccess(space: any): string {
+  if (space.scope === "DATA_PRODUCT") {
+    const folders = (space.prefixes ?? []).join(", ")
+    return folders ? `read only in ${folders}` : "read only"
+  }
+  return canWrite(space) ? `${space.role.toLowerCase()} access` : "read only"
+}
+
 export default async function SpacePage({
   params,
 }: {
@@ -49,11 +66,11 @@ export default async function SpacePage({
             {space && (
               <p className="text-sm text-gray-500 mt-1">
                 {space.tier} · versioning {space.versioning?.toLowerCase() ?? "unknown"}
-                {space.role === "writer" ? " · writer access" : " · read only"}
+                {" · "}{describeAccess(space)}
               </p>
             )}
           </div>
-          {space?.role === "writer" && (
+          {space && canWrite(space) && (
             <Link
               href={`/spaces/${spaceId}/upload`}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
