@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cognitoConfig } from "@/lib/cognito"
+import { entraConfig, logoutEndpoint } from "@/lib/entra"
 
 export async function GET(req: NextRequest) {
-  const logoutUrl = new URL("/logout", cognitoConfig.domain)
-  logoutUrl.searchParams.set("client_id", cognitoConfig.clientId)
-  logoutUrl.searchParams.set("logout_uri", cognitoConfig.logoutRedirectUri)
+  const url = logoutEndpoint()
+  url.searchParams.set("post_logout_redirect_uri", entraConfig.postLogoutUri)
 
-  const response = NextResponse.redirect(logoutUrl)
+  // Clearing our cookies signs the user out of this app; the redirect ends
+  // the Entra session too, so the next login is not silently re-established.
+  const response = NextResponse.redirect(url)
   response.cookies.delete("sdc_id_token")
-  response.cookies.delete("sdc_access_token")
   response.cookies.delete("sdc_refresh_token")
   return response
 }

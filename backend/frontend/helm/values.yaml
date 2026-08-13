@@ -3,5 +3,14 @@ image:
   tag: latest
 
 dataServiceUrl: "http://data-service.app.svc.cluster.local"
-testUserId:     "test-user-123"
-testSourceRole: "space-test-gw"
+
+entra:
+  tenantId: ""
+  clientId: ""
+  # The client secret is NOT set here. It comes from External Secrets in
+  # week 4; until then the deployment reads it from a Secret you create by
+  # hand. A secret in values.yaml is a secret in git.
+  secretName: sdc-lake-entra
+  secretKey: client-secret
+  redirectUri: ""
+  postLogoutUri: ""

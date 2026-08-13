@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 const PUBLIC_PATHS = [
   "/api/auth/login",
-  "/api/auth/callback/cognito",
+  "/api/auth/callback/entra",
   "/api/auth/logout",
 ]
 

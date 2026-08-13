@@ -11,10 +11,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
+    // Only the space id and tier are forwarded. The owner is whoever the
+    // verified token says it is, decided by the data service - the browser
+    // does not get to nominate someone else.
     const data = await createSpace({
       spaceId: body.spaceId,
-      owner:   session.email ?? session.userId,
-      ownerId: session.userId,
       tier:    body.tier ?? "standard",
     })
 

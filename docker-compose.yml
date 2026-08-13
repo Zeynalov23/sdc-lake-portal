@@ -60,3 +60,34 @@ services:
       POLL_WAIT_SECONDS: "10"
     volumes:
       - ./backend/provisioning-service:/app
+
+  frontend:
+    build:
+      context: ./backend/frontend
+      # The production image runs `next build`; for development we want the
+      # dev server with hot reload, so the image is only used for its
+      # node_modules layer and the command is overridden below.
+      target: deps
+    env_file:
+      - .env
+    environment:
+      # The browser talks to the Next.js server, and the Next.js server talks
+      # to the data service over the compose network - the same shape as the
+      # cluster, where only the frontend is exposed through the Gateway.
+      DATA_SERVICE_URL: http://data-service:8000
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET}
+      ENTRA_REDIRECT_URI: http://localhost:3000/api/auth/callback/entra
+      ENTRA_POST_LOGOUT_URI: http://localhost:3000
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/frontend:/app
+      # Keep the image's node_modules rather than shadowing it with the host's,
+      # which may have been installed for a different platform.
+      - /app/node_modules
+    command: npm run dev
+    depends_on:
+      - data-service

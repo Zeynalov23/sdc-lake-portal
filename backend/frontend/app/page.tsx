@@ -14,14 +14,33 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function RoleBadge({ role, type }: { role: string; type: string }) {
+const ROLE_STYLES: Record<string, string> = {
+  OWNER:    "bg-purple-100 text-purple-700",
+  DEPUTY:   "bg-purple-100 text-purple-700",
+  PRODUCER: "bg-blue-100 text-blue-700",
+  CONSUMER: "bg-gray-100 text-gray-600",
+}
+
+function RoleBadge({ role, scope, dataProductId }: {
+  role: string
+  scope: string
+  dataProductId?: string
+}) {
+  // A data-product grant is not a role in the space, so label it by the
+  // folder it covers - otherwise "CONSUMER" reads as access to everything.
+  if (scope === "DATA_PRODUCT") {
+    return (
+      <span className="text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700">
+        {dataProductId ? `${dataProductId}/ only` : "data product only"}
+      </span>
+    )
+  }
+
   return (
     <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-      role === "writer"
-        ? "bg-blue-100 text-blue-700"
-        : "bg-gray-100 text-gray-600"
+      ROLE_STYLES[role] ?? "bg-gray-100 text-gray-600"
     }`}>
-      {type === "GUEST" ? "guest " : ""}{role}
+      {role.toLowerCase()}
     </span>
   )
 }
@@ -98,7 +117,7 @@ export default async function HomePage() {
               <StatusBadge status={space.status} />
             </div>
             <div className="flex items-center gap-2 mb-3">
-              <RoleBadge role={space.role} type={space.type} />
+              <RoleBadge role={space.role} scope={space.scope} dataProductId={space.dataProductId} />
               {space.tier && (
                 <span className="text-xs text-gray-400">{space.tier}</span>
               )}

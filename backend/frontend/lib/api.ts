@@ -65,27 +65,128 @@ export async function getUploadUrl(spaceId: string, key: string, contentType: st
 }
 
 // ---------------------------------------------------------------
-// Control plane API calls (Next.js server → API Gateway → Lambda)
+// Writes
+//
+// These used to go through API Gateway to a Lambda, authenticated with a
+// shared API key. They go to the data service now: it already verifies the
+// caller's Entra token, so a second credential added nothing but a secret to
+// leak and a component to keep alive.
 // ---------------------------------------------------------------
-const controlHeaders = {
-  "Content-Type": "application/json",
-  "x-api-key":    config.apiGatewayKey,
+async function post(path: string, body: unknown) {
+  const res = await fetch(`${config.dataServiceUrl}${path}`, {
+    method:  "POST",
+    headers: await dataHeaders(),
+    body:    JSON.stringify(body),
+  })
+  if (res.status === 401) throw new AuthError("Session expired")
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail.detail ?? `Request failed: ${res.statusText}`)
+  }
+  return res.json()
 }
 
-export async function createSpace(data: {
-  spaceId: string
-  owner:   string
-  ownerId: string
-  tier:    string
-}) {
-  const res = await fetch(`${config.apiGatewayUrl}/spaces`, {
-    method:  "POST",
-    headers: controlHeaders,
-    body:    JSON.stringify(data),
+async function del(path: string) {
+  const res = await fetch(`${config.dataServiceUrl}${path}`, {
+    method:  "DELETE",
+    headers: await dataHeaders(),
   })
+  if (res.status === 401) throw new AuthError("Session expired")
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || "Failed to create space")
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail.detail ?? `Request failed: ${res.statusText}`)
   }
+  return res.status === 204 ? null : res.json()
+}
+
+export async function createSpace(data: { spaceId: string; tier?: string }) {
+  // The owner is not sent: the data service takes it from the verified token.
+  // Letting the client name the owner would let it name someone else.
+  return post("/spaces", { spaceId: data.spaceId, tier: data.tier ?? "standard" })
+}
+
+// --- members ---
+export async function getMembers(spaceId: string) {
+  const res = await fetch(`${config.dataServiceUrl}/spaces/${spaceId}/members`, {
+    headers: await dataHeaders(),
+    cache: "no-store",
+  })
+  if (res.status === 401) throw new AuthError("Session expired")
+  if (!res.ok) throw new Error(`Failed to fetch members: ${res.statusText}`)
+  return res.json()
+}
+
+export async function addMember(spaceId: string, email: string, role: string) {
+  return post(`/spaces/${spaceId}/members`, { email, role })
+}
+
+export async function removeMember(spaceId: string, userId: string) {
+  return del(`/spaces/${spaceId}/members/${userId}`)
+}
+
+export async function assignDeputy(spaceId: string, email: string) {
+  const res = await fetch(`${config.dataServiceUrl}/spaces/${spaceId}/deputy`, {
+    method:  "PUT",
+    headers: await dataHeaders(),
+    body:    JSON.stringify({ email }),
+  })
+  if (res.status === 401) throw new AuthError("Session expired")
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}))
+    throw new Error(detail.detail ?? "Failed to assign deputy")
+  }
+  return res.json()
+}
+
+export async function clearDeputy(spaceId: string) {
+  return del(`/spaces/${spaceId}/deputy`)
+}
+
+// --- data products ---
+export async function getProducts(spaceId: string) {
+  const res = await fetch(`${config.dataServiceUrl}/spaces/${spaceId}/products`, {
+    headers: await dataHeaders(),
+    cache: "no-store",
+  })
+  if (res.status === 401) throw new AuthError("Session expired")
+  if (!res.ok) throw new Error(`Failed to fetch data products: ${res.statusText}`)
+  return res.json()
+}
+
+export async function stageProduct(spaceId: string, name: string, description?: string) {
+  return post(`/spaces/${spaceId}/products`, { name, description })
+}
+
+export async function unstageProduct(spaceId: string, name: string) {
+  return del(`/spaces/${spaceId}/products/${name}`)
+}
+
+export async function getProductConsumers(spaceId: string, name: string) {
+  const res = await fetch(
+    `${config.dataServiceUrl}/spaces/${spaceId}/products/${name}/consumers`,
+    { headers: await dataHeaders(), cache: "no-store" },
+  )
+  if (res.status === 401) throw new AuthError("Session expired")
+  if (!res.ok) throw new Error(`Failed to fetch consumers: ${res.statusText}`)
+  return res.json()
+}
+
+export async function addProductConsumer(spaceId: string, name: string, email: string) {
+  return post(`/spaces/${spaceId}/products/${name}/consumers`, { email })
+}
+
+export async function removeProductConsumer(spaceId: string, name: string, userId: string) {
+  return del(`/spaces/${spaceId}/products/${name}/consumers/${userId}`)
+}
+
+// --- space settings ---
+export async function setVersioning(spaceId: string, enabled: boolean) {
+  const res = await fetch(`${config.dataServiceUrl}/spaces/${spaceId}/versioning`, {
+    method:  "PATCH",
+    headers: await dataHeaders(),
+    body:    JSON.stringify({ enabled }),
+  })
+  if (res.status === 401) throw new AuthError("Session expired")
+  if (!res.ok) throw new Error("Failed to update versioning")
   return res.json()
 }
