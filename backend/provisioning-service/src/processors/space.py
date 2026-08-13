@@ -80,6 +80,14 @@ def _create_bucket(bucket_name: str, region: str) -> None:
         else:
             raise
 
+    # A bucket exists in the API before its endpoint resolves globally, and
+    # requests in that window get TemporaryRedirect. Wait for it, otherwise
+    # the space is marked READY while uploads to it still fail.
+    s3.get_waiter("bucket_exists").wait(
+        Bucket=bucket_name,
+        WaiterConfig={"Delay": 2, "MaxAttempts": 15},
+    )
+
     s3.put_public_access_block(
         Bucket=bucket_name,
         PublicAccessBlockConfiguration={

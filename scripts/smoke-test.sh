@@ -37,12 +37,29 @@ url=$(curl -sf -X POST "${API}/spaces/${SPACE_ID}/files/upload" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['url'])")
 
 echo "--> uploading"
-echo "hello from the smoke test" | curl -sf -X PUT --data-binary @- \
-  -H "Content-Type: text/plain" "${url}"
+# -f alone is not enough: it treats a 3xx as success, so a TemporaryRedirect
+# from S3 looks like a working upload. Check the status code explicitly.
+for attempt in 1 2 3 4 5; do
+  code=$(echo "hello from the smoke test" | curl -s -o /tmp/upload-out -w '%{http_code}' \
+    -X PUT --data-binary @- -H "Content-Type: text/plain" "${url}")
+  if [ "${code}" = "200" ]; then
+    echo "    uploaded"
+    break
+  fi
+  echo "    attempt ${attempt}: HTTP ${code}"
+  cat /tmp/upload-out
+  if [ "${attempt}" = "5" ]; then echo "--> upload failed"; exit 1; fi
+  sleep 3
+done
 
 echo "--> listing"
-curl -sf "${API}/spaces/${SPACE_ID}/files" -H "X-Dev-User: ${USER_ID}"
-echo
+listing=$(curl -sf "${API}/spaces/${SPACE_ID}/files" -H "X-Dev-User: ${USER_ID}")
+echo "${listing}"
+count=$(echo "${listing}" | python3 -c "import sys,json; print(json.load(sys.stdin)['count'])")
+if [ "${count}" -lt 1 ]; then
+  echo "--> the upload did not land: listing is empty"
+  exit 1
+fi
 
 echo "--> a stranger must be denied"
 code=$(curl -s -o /dev/null -w '%{http_code}' \
