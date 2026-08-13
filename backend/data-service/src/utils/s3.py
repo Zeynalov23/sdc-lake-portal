@@ -1,7 +1,12 @@
 """
 S3 helpers for the data service.
-The data service uses one shared bucket and isolates spaces by key prefix.
-EKS Pod Identity provides temporary AWS credentials automatically.
+
+One bucket per space. Authorisation is decided in authz.py and enforced by
+signing a URL for one specific object key, so callers must never pass a key
+here that has not been through a guard.
+
+Credentials come from the environment: a local session token in development,
+Pod Identity in the cluster. The code does not care which.
 """
 import os
 
@@ -10,10 +15,19 @@ from botocore.config import Config
 
 _REGION = os.environ.get("AWS_REGION", "eu-west-1")
 
+# addressing_style="virtual" is required, not cosmetic. Without it, presigned
+# URLs are built against the global host (my-bucket.s3.amazonaws.com) while
+# the signature is scoped to the real region. S3 answers those with a 307
+# TemporaryRedirect, and since curl and most HTTP clients will not replay a
+# PUT body across a redirect, every upload fails. Setting it explicitly makes
+# the host and the signature agree: my-bucket.s3.eu-west-1.amazonaws.com
 _s3 = boto3.client(
     "s3",
     region_name=_REGION,
-    config=Config(signature_version="s3v4"),
+    config=Config(
+        signature_version="s3v4",
+        s3={"addressing_style": "virtual"},
+    ),
 )
 
 _PRESIGNED_URL_EXPIRY = 3600  # 1 hour
