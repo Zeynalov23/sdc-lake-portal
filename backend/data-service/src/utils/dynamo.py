@@ -323,3 +323,123 @@ def remove_deputy(space_id: str, user_id: str) -> None:
             },
         ]
     )
+
+
+# ---------------------------------------------------------------
+# Data products
+#
+# A data product is a root-level folder an owner has deliberately staged for
+# sharing. Not every folder is one: staging is the act that makes a folder
+# grantable to people who have no access to the rest of the space.
+# ---------------------------------------------------------------
+def put_data_product(
+    space_id: str,
+    data_product_id: str,
+    description: Optional[str],
+    created_by: str,
+) -> None:
+    now = _now()
+    _table.put_item(
+        Item={
+            "PK": f"SPACE#{space_id}",
+            "SK": f"DATAPRODUCT#{data_product_id}",
+            "spaceId": space_id,
+            "dataProductId": data_product_id,
+            "description": description,
+            "createdBy": created_by,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+    )
+
+
+def list_data_products(space_id: str) -> list:
+    """
+    Staged products only - the SK prefix excludes consumer grants, whose keys
+    continue past the product id with #CONSUMER#.
+    """
+    response = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"SPACE#{space_id}")
+        & Key("SK").begins_with("DATAPRODUCT#"),
+    )
+    return [
+        item for item in response.get("Items", [])
+        if "#CONSUMER#" not in str(item.get("SK", ""))
+    ]
+
+
+def list_data_product_consumers(space_id: str, data_product_id: str) -> list:
+    response = _table.query(
+        KeyConditionExpression=Key("PK").eq(f"SPACE#{space_id}")
+        & Key("SK").begins_with(f"DATAPRODUCT#{data_product_id}#CONSUMER#"),
+    )
+    return response.get("Items", [])
+
+
+def put_data_product_consumer(
+    space_id: str,
+    data_product_id: str,
+    user_id: str,
+    email: Optional[str],
+    name: Optional[str],
+) -> None:
+    """
+    Grant one user read access to one staged folder.
+
+    userId is set because the GSI keys on it: that is how a consumer's grants
+    are found when they list a space they are otherwise not a member of.
+    """
+    now = _now()
+    _table.put_item(
+        Item={
+            "PK": f"SPACE#{space_id}",
+            "SK": f"DATAPRODUCT#{data_product_id}#CONSUMER#{user_id}",
+            "spaceId": space_id,
+            "dataProductId": data_product_id,
+            "userId": user_id,
+            "email": email,
+            "name": name,
+            "status": "ACTIVE",
+            "createdAt": now,
+            "updatedAt": now,
+        }
+    )
+
+
+def delete_data_product_consumer(
+    space_id: str,
+    data_product_id: str,
+    user_id: str,
+) -> None:
+    _table.delete_item(
+        Key={
+            "PK": f"SPACE#{space_id}",
+            "SK": f"DATAPRODUCT#{data_product_id}#CONSUMER#{user_id}",
+        }
+    )
+
+
+def delete_data_product(space_id: str, data_product_id: str) -> int:
+    """
+    Unstage a folder and revoke every grant on it. Returns how many grants
+    were revoked.
+
+    The cascade is the security-relevant part. Consumer grants are what
+    authz turns into an allowed key prefix, and it does not re-check that the
+    product is still staged - so a grant left behind after unstaging would
+    keep working. Deleting the product row alone would silently leave access
+    in place while the UI showed the folder as no longer shared.
+    """
+    consumers = list_data_product_consumers(space_id, data_product_id)
+
+    with _table.batch_writer() as batch:
+        for consumer in consumers:
+            batch.delete_item(Key={"PK": consumer["PK"], "SK": consumer["SK"]})
+        batch.delete_item(
+            Key={
+                "PK": f"SPACE#{space_id}",
+                "SK": f"DATAPRODUCT#{data_product_id}",
+            }
+        )
+
+    return len(consumers)

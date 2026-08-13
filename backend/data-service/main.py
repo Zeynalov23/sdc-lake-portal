@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.routers import spaces, files, members
+from src.routers import spaces, files, members, products
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +32,7 @@ app.add_middleware(
 app.include_router(spaces.router, prefix="/spaces", tags=["spaces"])
 app.include_router(files.router,  prefix="/spaces", tags=["files"])
 app.include_router(members.router, prefix="/spaces", tags=["members"])
+app.include_router(products.router, prefix="/spaces", tags=["data products"])
 
 
 @app.get("/health")

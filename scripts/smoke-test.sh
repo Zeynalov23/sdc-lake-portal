@@ -121,4 +121,49 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
 [ "${code}" = "409" ] || { echo "    owner was removable: got ${code}"; exit 1; }
 echo "    409"
 
+echo "--> staging a data product"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "${API}/spaces/${SPACE_ID}/products" \
+  -H "Content-Type: application/json" -H "X-Dev-User: ${USER_ID}" \
+  -d '{"name":"nosuchfolder"}')
+[ "${code}" = "404" ] || { echo "    staged a folder that does not exist: ${code}"; exit 1; }
+echo "    unknown folder rejected"
+
+curl -sf -X POST "${API}/spaces/${SPACE_ID}/products" \
+  -H "Content-Type: application/json" -H "X-Dev-User: ${USER_ID}" \
+  -d '{"name":"sales","description":"demo"}' > /dev/null
+echo "    sales staged"
+
+echo "--> granting an outsider read on that product"
+curl -sf -X POST "${API}/spaces/${SPACE_ID}/products/sales/consumers" \
+  -H "Content-Type: application/json" -H "X-Dev-User: ${USER_ID}" \
+  -d '{"email":"grace@example.com"}' > /dev/null
+
+# grace is not a member of the space at all - she should see only sales/
+listing=$(curl -sf "${API}/spaces/${SPACE_ID}/files" -H "X-Dev-User: dev-grace")
+count=$(echo "${listing}" | python3 -c "import sys,json; print(json.load(sys.stdin)['count'])")
+[ "${count}" = "1" ] || { echo "    outsider listing wrong: ${listing}"; exit 1; }
+echo "    outsider sees 1 file in sales/"
+
+echo "--> the outsider is confined to that folder"
+code=$(curl -s -o /dev/null -w '%{http_code}' \
+  "${API}/spaces/${SPACE_ID}/files/download?key=hr/secret.csv" \
+  -H "X-Dev-User: dev-grace")
+[ "${code}" = "404" ] || { echo "    escaped the prefix: got ${code}"; exit 1; }
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "${API}/spaces/${SPACE_ID}/files/upload" \
+  -H "Content-Type: application/json" -H "X-Dev-User: dev-grace" \
+  -d '{"key":"sales/nope.txt","content_type":"text/plain"}')
+[ "${code}" = "403" ] || { echo "    outsider could write: got ${code}"; exit 1; }
+echo "    cross-folder read 404, write 403"
+
+echo "--> unstaging revokes the grant"
+curl -sf -X DELETE "${API}/spaces/${SPACE_ID}/products/sales" \
+  -H "X-Dev-User: ${USER_ID}" > /dev/null
+code=$(curl -s -o /dev/null -w '%{http_code}' \
+  "${API}/spaces/${SPACE_ID}/files" -H "X-Dev-User: dev-grace")
+[ "${code}" = "403" ] || { echo "    access survived unstaging: got ${code}"; exit 1; }
+echo "    outsider now gets 403"
+
 echo "--> all checks passed"
