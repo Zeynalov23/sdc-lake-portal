@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: data-service-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Zeynalov23/sdc-lake-portal.git
+    targetRevision: main
+    path: apps/data-service/helm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: hello-world
+  name: provisioning-service-app
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: git@github.com:Zeynalov23/sdc-lake-portal.git
+    repoURL: https://github.com/Zeynalov23/sdc-lake-portal.git
     targetRevision: main
-    path: apps/hello-world
+    path: apps/provisioning-service/helm
   destination:
     server: https://kubernetes.default.svc
     namespace: app
