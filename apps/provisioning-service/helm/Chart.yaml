@@ -1,0 +1,4 @@
+apiVersion: v2
+name: provisioning-service
+description: GitOps provisioning service
+version: 0.1.0
