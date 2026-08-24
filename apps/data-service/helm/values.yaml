@@ -1,5 +1,5 @@
 image:
-  repository: <your-account-id>.dkr.ecr.eu-west-1.amazonaws.com/sdc-lake-dev/data-service
+  repository: 339935010405.dkr.ecr.eu-west-1.amazonaws.com/sdc-lake-dev/data-service
   tag: latest
 
 dynamodb:
@@ -7,10 +7,8 @@ dynamodb:
 
 aws:
   region: eu-west-1
-  accountId: <your-account-id>
+  accountId: 339935010405
 
 entra:
   tenantId: 83e36855-c258-41a8-9c37-d5406de024a3
-
-entra:
   clientId: 3100f22d-72cb-41da-9f6c-7c0c4c3e5ec9

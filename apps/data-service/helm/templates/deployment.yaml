@@ -28,6 +28,13 @@ spec:
               value: {{ .Values.aws.accountId | quote }}
             - name: ENTRA_TENANT_ID
               value: {{ .Values.entra.tenantId}}
+            - name: ENTRA_CLIENT_ID
+              value: {{ .Values.entra.clientId}}
+            - name: ENTRA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sdc-lake-entra
+                  key: client-secret
           readinessProbe:
             httpGet:
               path: /health
