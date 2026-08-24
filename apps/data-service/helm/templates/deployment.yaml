@@ -26,6 +26,8 @@ spec:
               value: {{ .Values.aws.region }}
             - name: AWS_ACCOUNT_ID
               value: {{ .Values.aws.accountId | quote }}
+            - name: ENTRA_TENANT_ID
+              value: {{ .Values.entra.tenantId}}
           readinessProbe:
             httpGet:
               path: /health
