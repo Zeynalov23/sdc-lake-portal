@@ -1,0 +1,45 @@
+image:
+  # The ECR repository is sdc-lake-dev/frontend - the chart is named
+  # frontend-service, but the image name has to match what actually exists in
+  # ECR or the pod gets ImagePullBackOff.
+  repository: 339935010405.dkr.ecr.eu-west-1.amazonaws.com/sdc-lake-dev/frontend
+  tag: latest
+
+replicas: 1
+
+# The browser talks to Next.js; Next.js talks to the data service inside the
+# cluster. Only the frontend is reachable from outside, so the data service
+# needs no ingress of its own.
+dataServiceUrl: http://data-service.app.svc.cluster.local
+
+entra:
+  # Tenant and client id are identifiers, not secrets - both appear in every
+  # login redirect URL in the browser.
+  tenantId: 83e36855-c258-41a8-9c37-d5406de024a3
+  clientId: 3100f22d-72cb-41da-9f6c-7c0c4c3e5ec9
+
+  # Must match a redirect URI registered on the app registration, exactly.
+  # Entra requires HTTPS for anything that is not localhost, so this stays a
+  # placeholder until the Gateway has a real hostname and certificate. The
+  # frontend runs before then; only the login round trip will fail.
+  redirectUri: https://sdc-lake.example.com/api/auth/callback/entra
+  postLogoutUri: https://sdc-lake.example.com
+
+  # The client secret is NOT here. values.yaml is in git; the secret comes
+  # from a Kubernetes Secret created out of band:
+  #   kubectl create secret generic sdc-lake-entra -n app \
+  #     --from-literal=client-secret='...'
+  # Replaced by an ExternalSecret in week 4, with no change to the deployment.
+  secretName: sdc-lake-entra
+  secretKey: client-secret
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    # Memory limit only. CPU is compressible, so a limit just throttles the
+    # container while the node has idle capacity; the request already
+    # guarantees a share under contention. Memory is not compressible, so
+    # exceeding it means the OOM killer, and a limit is real protection.
+    memory: 512Mi
