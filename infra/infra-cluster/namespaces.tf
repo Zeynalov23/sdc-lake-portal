@@ -42,17 +42,4 @@ resource "kubernetes_namespace" "argocd" {
 # Service accounts for Pod Identity
 # Must exist in the app namespace so Pod Identity associations work
 # ---------------------------------------------------------------
-resource "kubernetes_service_account" "data_service" {
-  metadata {
-    name      = "data-service"
-    namespace = kubernetes_namespace.app.metadata[0].name
-  }
-}
-
-resource "kubernetes_service_account" "provisioning_service" {
-  metadata {
-    name      = "provisioning-service"
-    namespace = kubernetes_namespace.app.metadata[0].name
-  }
-}
 
