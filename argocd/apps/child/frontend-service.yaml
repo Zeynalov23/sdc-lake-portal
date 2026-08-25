@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/Zeynalov23/sdc-lake-portal.git
     targetRevision: main
-    path: apps/frontend-service/helm
+    path: apps/frontend-service
   destination:
     server: https://kubernetes.default.svc
     namespace: app
