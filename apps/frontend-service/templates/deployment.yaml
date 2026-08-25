@@ -30,6 +30,8 @@ spec:
             # inside the cluster can use the plain hostname.
             - containerPort: 3000
           env:
+            - name: HOSTNAME 
+              value: "0.0.0.0"
             - name: DATA_SERVICE_URL
               value: {{ .Values.dataServiceUrl | quote }}
             - name: ENTRA_TENANT_ID
