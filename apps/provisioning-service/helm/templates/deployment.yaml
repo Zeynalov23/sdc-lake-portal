@@ -37,19 +37,21 @@ spec:
               memory: 256Mi
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-          - mountPath: /tmp/heartbeat
+          - mountPath: /tmp
             name: heartbeat
           livenessProbe:
             exec:
               command:
-              - test
-              - $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60
-            initialDelaySeconds: 5
+              - sh
+              - -c
+              - test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60            
+            initialDelaySeconds: 30
             periodSeconds: 5
       volumes:
       - name: heartbeat
