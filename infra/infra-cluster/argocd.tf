@@ -72,39 +72,3 @@ resource "helm_release" "argocd" {
   ]
 }
 
-# ---------------------------------------------------------------
-# HTTPRoute for ArgoCD UI via Envoy Gateway
-# ---------------------------------------------------------------
-resource "null_resource" "argocd_httproute" {
-  provisioner "local-exec" {
-    command = <<-EOF
-      kubectl apply -f - <<YAML
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: argocd
-  namespace: argocd
-spec:
-  parentRefs:
-    - name: envoy-gateway
-      namespace: envoy-gateway-system
-  hostnames:
-    - "argocd.sdc-lake.local"
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: argocd-server
-          port: 80
-YAML
-    EOF
-  }
-
-  depends_on = [
-    helm_release.argocd,
-    helm_release.envoy_gateway,
-    null_resource.gateway_api_crds,
-  ]
-}

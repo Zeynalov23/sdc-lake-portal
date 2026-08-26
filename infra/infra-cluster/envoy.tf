@@ -1,9 +1,3 @@
-# ---------------------------------------------------------------
-# Envoy Gateway
-# Installed via Helm after the cluster is ready.
-# This is the Gateway API implementation — it watches HTTPRoute
-# and Gateway resources and programs Envoy Proxy accordingly.
-# ---------------------------------------------------------------
 resource "helm_release" "envoy_gateway" {
   name             = "envoy-gateway"
   repository       = "oci://docker.io/envoyproxy"
@@ -12,36 +6,24 @@ resource "helm_release" "envoy_gateway" {
   namespace        = "envoy-gateway-system"
   create_namespace = true
 
-  # Wait until all pods are running before Terraform returns
   wait    = true
   timeout = 300
 
-  # The Envoy Gateway config — use NLB for the Gateway listener
   set {
     name  = "config.envoyGateway.provider.type"
     value = "Kubernetes"
   }
 
-  depends_on = [module.eks]
-}
-
-# ---------------------------------------------------------------
-# Gateway API CRDs
-# Envoy Gateway depends on the standard Gateway API CRDs.
-# Install them before the Helm chart.
-# ---------------------------------------------------------------
-resource "null_resource" "gateway_api_crds" {
-  provisioner "local-exec" {
-    command = "kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml"
-    environment = {
-      KUBECONFIG = ""
-    }
-  }
-
-  # Re-run if the cluster changes
-  triggers = {
-    cluster_name = module.eks.cluster_name
-  }
+  # The chart ships the Gateway API CRDs in its crds/ directory and installs
+  # them itself, so there is nothing to install separately. A second source
+  # for the same CRDs is worse than none: this chart carries the experimental
+  # channel, and applying the standard channel alongside it means whichever
+  # ran last wins.
+  #
+  # Known limitation: Helm installs crds/ on first install but never on
+  # upgrade, so bumping this version will not update the CRDs. Doing that
+  # needs a deliberate `kubectl apply --server-side` of the new CRD set,
+  # which is a good argument for moving CRD management to ArgoCD later.
 
   depends_on = [module.eks]
 }

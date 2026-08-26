@@ -1,0 +1,4 @@
+apiVersion: v2
+name: httproute
+description: GitOps httproute resource
+version: 0.1.0
