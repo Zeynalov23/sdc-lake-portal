@@ -15,3 +15,9 @@ variable "project" {
   type        = string
   default     = "sdc-lake"
 }
+
+variable "dns_zone_name" {
+  description = "DNS Zone name"
+  type = string
+  default = "sdc-lake.jobnode.io"
+}
