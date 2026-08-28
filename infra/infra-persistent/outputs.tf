@@ -53,3 +53,23 @@ output "cognito_user_pool_endpoint" {
 output "cognito_domain" {
   value = aws_cognito_user_pool_domain.main.domain
 }
+# Add these four as NS records at the registrar, with host set to the
+# subdomain label (e.g. "sdc-lake"). Until that is done, Route 53 is not
+# authoritative and certificate validation cannot complete.
+output "dns_zone_name_servers" {
+  value = aws_route53_zone.platform.name_servers
+}
+
+output "dns_zone_id" {
+  value = aws_route53_zone.platform.zone_id
+}
+
+output "dns_zone_name" {
+  value = aws_route53_zone.platform.name
+}
+
+output "acm_certificate_arn" {
+  # Taken from the validation resource rather than the certificate, so that
+  # anything referencing it waits until the certificate is actually issued.
+  value = aws_acm_certificate_validation.platform.certificate_arn
+}
