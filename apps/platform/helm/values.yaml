@@ -16,4 +16,4 @@ gateway:
   # convention that both Terraform and this chart could follow independently.
   # Renewal keeps the same ARN, so this is stable in practice; replacing the
   # certificate is what would require an edit here. See docs/adr/012.
-  acmCertificateArn: "REPLACE_ME"
+  acmCertificateArn: "arn:aws:acm:eu-west-1:339935010405:certificate/cf3e775b-9427-4e59-b071-515f91e441bb"
