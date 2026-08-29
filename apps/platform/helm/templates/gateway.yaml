@@ -1,0 +1,103 @@
+{{/*
+Ingress for the platform.
+
+Traffic path:
+
+  client --TLS--> NLB --plaintext--> Envoy --> Service
+
+TLS terminates at the NLB using the ACM certificate, so the private key never
+leaves AWS and nothing has to hold it in a Kubernetes Secret. That is why the
+443 listener below is declared as HTTP rather than HTTPS: by the time a
+request reaches Envoy it has already been decrypted, and Envoy would fail to
+serve TLS on a port where none is expected.
+
+The consequence is that Envoy cannot tell an originally-encrypted request from
+a plaintext one - an NLB is layer 4 and adds no X-Forwarded-Proto header. So
+there is no HTTP-to-HTTPS redirect here; port 80 is simply not exposed. A
+redirect would need either an ALB or proxy protocol enabled on the NLB.
+*/}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  # Matches the controller installed by the gateway-helm chart. Envoy Gateway
+  # ships the controller only - the GatewayClass and Gateway are ours to
+  # declare, which is why nothing was listening before this existed.
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.gateway.namespace }}
+spec:
+  gatewayClassName: envoy
+  infrastructure:
+    # Envoy Gateway copies these onto the Service it creates, and the AWS
+    # cloud controller reads them when provisioning the load balancer.
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: external
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      # The certificate has to be named by ARN. Certificate discovery by
+      # hostname exists, but only for ALB via Ingress through the AWS Load
+      # Balancer Controller - not for an NLB provisioned this way. See
+      # docs/adr/012.
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: {{ .Values.gateway.acmCertificateArn | quote }}
+      service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+  listeners:
+    - name: https
+      protocol: HTTP
+      port: 443
+      hostname: "*.{{ .Values.dnsZone }}"
+      allowedRoutes:
+        # Routes live beside the workloads they expose - the portal route in
+        # app, the ArgoCD route in argocd - so the Gateway has to accept
+        # routes from namespaces other than its own.
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+  hostnames:
+    - {{ .Values.hostnames.argocd | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        # ArgoCD runs with server.insecure=true, so argocd-server serves plain
+        # HTTP on 80. Without that it would serve TLS and Envoy would be
+        # speaking plaintext to a TLS port.
+        - name: argocd-server
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: portal
+  namespace: app
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+  hostnames:
+    - {{ .Values.hostnames.portal | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend-service
+          port: 80

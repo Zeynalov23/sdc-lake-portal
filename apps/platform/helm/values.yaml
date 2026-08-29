@@ -1,0 +1,19 @@
+# The delegated Route 53 zone. Everything the platform exposes is a hostname
+# under it, and the wildcard certificate covers all of them.
+dnsZone: sdc-lake.jobnode.io
+
+hostnames:
+  portal: portal.sdc-lake.jobnode.io
+  argocd: argocd.sdc-lake.jobnode.io
+
+gateway:
+  name: envoy-gateway
+  namespace: envoy-gateway-system
+
+  # From: terraform -chdir=infra/infra-persistent output -raw acm_certificate_arn
+  #
+  # Pinned by hand because an ACM ARN is generated, not chosen - there is no
+  # convention that both Terraform and this chart could follow independently.
+  # Renewal keeps the same ARN, so this is stable in practice; replacing the
+  # certificate is what would require an edit here. See docs/adr/012.
+  acmCertificateArn: "REPLACE_ME"
