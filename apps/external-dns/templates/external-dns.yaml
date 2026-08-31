@@ -89,7 +89,7 @@ spec:
             - --registry=txt
             - --txt-owner-id={{ .Values.txtOwnerId }}
             - --interval=1m
-            - --log-level=info
+            - --log-level=debug
           env:
             - name: AWS_REGION
               value: eu-west-1
