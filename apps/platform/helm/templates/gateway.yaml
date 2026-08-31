@@ -37,8 +37,7 @@ spec:
     # Envoy Gateway copies these onto the Service it creates, and the AWS
     # cloud controller reads them when provisioning the load balancer.
     annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: external
-      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    
       service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
       # The certificate has to be named by ARN. Certificate discovery by
       # hostname exists, but only for ALB via Ingress through the AWS Load
