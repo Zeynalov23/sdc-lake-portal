@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-dns
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-dns
+  namespace: external-dns
+  # The name and namespace here are referenced as plain strings by the Pod
+  # Identity association in infra-cluster/eks.tf. Nothing validates that the
+  # two agree: rename either side and both Terraform and ArgoCD stay green
+  # while the pod fails at runtime with AccessDenied. See docs/adr/004.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-dns
+rules:
+  # Gateway API resources are the source of truth for hostnames here.
+  # HTTPRoute carries the hostname; the Gateway carries the load balancer
+  # address the record should point at. ExternalDNS needs both to build a
+  # record, which is why Gateways are listed as well as routes.
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "httproutes", "grpcroutes", "tlsroutes", "tcproutes", "udproutes"]
+    verbs: ["get", "watch", "list"]
+  # Needed to resolve a Gateway's Service to its load balancer hostname.
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "pods", "nodes"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: external-dns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-dns
+subjects:
+  - kind: ServiceAccount
+    name: external-dns
+    namespace: external-dns
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-dns
+  namespace: external-dns
+spec:
+  # Exactly one. Two replicas would both reconcile the same zone and race on
+  # the same records; ExternalDNS has no leader election.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-dns
+    spec:
+      serviceAccountName: external-dns
+      securityContext:
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: external-dns
+          image: {{ .Values.image }}
+          args:
+            - --source=gateway-httproute
+            - --domain-filter={{ .Values.domainFilter }}
+            - --provider=aws
+            # Route 53 is global but the SDK still needs a region. Without
+            # this the container exits with NoRegionError, the same way the
+            # backend services did before their clients were made explicit.
+            - --aws-zone-type=public
+            - --policy={{ .Values.policy }}
+            - --registry=txt
+            - --txt-owner-id={{ .Values.txtOwnerId }}
+            - --interval=1m
+            - --log-level=info
+          env:
+            - name: AWS_REGION
+              value: eu-west-1
+            - name: AWS_DEFAULT_REGION
+              value: eu-west-1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

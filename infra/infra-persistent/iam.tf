@@ -147,3 +147,48 @@ resource "aws_iam_role_policy" "provisioning_service" {
     ]
   })
 }
+
+# ---------------------------------------------------------------
+# ExternalDNS role
+# Needs: write records in the platform hosted zone, and list zones to find it.
+# ---------------------------------------------------------------
+resource "aws_iam_role" "external_dns" {
+  name               = "${local.prefix}-external-dns"
+  assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
+
+  tags = { Name = "${local.prefix}-external-dns" }
+}
+
+resource "aws_iam_role_policy" "external_dns" {
+  name = "external-dns-policy"
+  role = aws_iam_role.external_dns.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Scoped to the platform zone. ExternalDNS can create and delete
+        # records here and nowhere else, so a misconfigured domain filter
+        # cannot touch another zone in the account.
+        Sid      = "ChangeRecordsInPlatformZone"
+        Effect   = "Allow"
+        Action   = ["route53:ChangeResourceRecordSets"]
+        Resource = aws_route53_zone.platform.arn
+      },
+      {
+        # These two do not support resource-level permissions - Route 53
+        # requires "*" - so they are read-only by necessity rather than
+        # choice. Listing zones is how ExternalDNS resolves the domain
+        # filter to a zone id at startup.
+        Sid    = "DiscoverZones"
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListResourceRecordSets",
+          "route53:ListTagsForResource",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}

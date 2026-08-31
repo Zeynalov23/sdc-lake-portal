@@ -1,0 +1,25 @@
+image: registry.k8s.io/external-dns/external-dns:v0.15.0
+
+# Only records under this suffix are managed. Anything else in the account is
+# invisible to ExternalDNS, which matters because the IAM policy is scoped to
+# one zone and a wider filter would just produce AccessDenied noise.
+domainFilter: sdc-lake.jobnode.io
+
+# ExternalDNS writes a TXT record beside each A record to mark ownership. This
+# is how it distinguishes records it created from records someone else made,
+# and therefore what it is allowed to delete.
+#
+# Stable across cluster rebuilds on purpose: a rebuilt cluster recognises
+# yesterday's records as its own and updates them in place. An id containing
+# anything per-cluster - a timestamp, the cluster's generated name - would
+# orphan every record on each teardown.
+#
+# It is not unique per cluster, though. A second cluster using this same id
+# would claim the same records and the two would fight, each rewriting the
+# other. Hence the -dev suffix: adding -staging later is the obvious move.
+txtOwnerId: sdclake-platform-dev
+
+# sync lets ExternalDNS delete records it owns, so a removed HTTPRoute takes
+# its DNS record with it. upsert-only never deletes: safer against a bug in
+# the domain filter, but leaves stale records behind on every teardown.
+policy: sync

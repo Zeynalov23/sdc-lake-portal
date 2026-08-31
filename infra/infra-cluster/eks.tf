@@ -90,3 +90,13 @@ resource "aws_eks_pod_identity_association" "provisioning_service" {
   role_arn        = local.persistent_state.iam_role_provisioning_service_arn
 }
 
+
+# ExternalDNS runs in its own namespace with its own service account. The
+# association is just four strings and AWS never checks that the service
+# account exists, so it does not matter that ArgoCD creates it later.
+resource "aws_eks_pod_identity_association" "external_dns" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "external-dns"
+  service_account = "external-dns"
+  role_arn        = local.persistent_state.iam_role_external_dns_arn
+}

@@ -73,3 +73,7 @@ output "acm_certificate_arn" {
   # anything referencing it waits until the certificate is actually issued.
   value = aws_acm_certificate_validation.platform.certificate_arn
 }
+
+output "iam_role_external_dns_arn" {
+  value = aws_iam_role.external_dns.arn
+}

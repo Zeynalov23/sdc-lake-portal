@@ -1,0 +1,4 @@
+apiVersion: v2
+name: external-dns
+description: Route 53 records maintained from Gateway API resources
+version: 0.1.0
