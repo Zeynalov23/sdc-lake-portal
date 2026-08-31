@@ -22,6 +22,9 @@ rules:
   # HTTPRoute carries the hostname; the Gateway carries the load balancer
   # address the record should point at. ExternalDNS needs both to build a
   # record, which is why Gateways are listed as well as routes.
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "pods", "nodes", "namespaces"]
+    verbs: ["get", "watch", "list"]
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["gateways", "httproutes", "grpcroutes", "tlsroutes", "tcproutes", "udproutes"]
     verbs: ["get", "watch", "list"]
