@@ -22,8 +22,8 @@ entra:
   # Entra requires HTTPS for anything that is not localhost, so this stays a
   # placeholder until the Gateway has a real hostname and certificate. The
   # frontend runs before then; only the login round trip will fail.
-  redirectUri: https://sdc-lake.example.com/api/auth/callback/entra
-  postLogoutUri: https://sdc-lake.example.com
+  redirectUri: https://portal.sdc-lake.jobnode.io/api/auth/callback/entra
+  postLogoutUri: https://portal.sdc-lake.jobnode.io
 
   # The client secret is NOT here. values.yaml is in git; the secret comes
   # from a Kubernetes Secret created out of band:
