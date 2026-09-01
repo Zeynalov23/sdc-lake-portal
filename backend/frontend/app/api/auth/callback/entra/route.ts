@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { entraConfig, tokenEndpoint } from "@/lib/entra"
+import { entraConfig, tokenEndpoint, appBaseUrl } from "@/lib/entra"
 
 // Cookie reads and writes both go through the single NextResponse we return:
 // mixing the next/headers jar with a manually constructed NextResponse does
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const fail = (reason: string) => {
     const response = NextResponse.redirect(
-      new URL(`/?authError=${encodeURIComponent(reason)}`, req.url),
+      new URL(`/?authError=${encodeURIComponent(reason)}`, appBaseUrl()),
     )
     response.cookies.delete("sdc_pkce_verifier")
     response.cookies.delete("sdc_oauth_state")
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   }
 
   const tokens = await tokenRes.json()
-  const response = NextResponse.redirect(new URL("/", req.url))
+  const response = NextResponse.redirect(new URL("/", appBaseUrl()))
 
   response.cookies.delete("sdc_pkce_verifier")
   response.cookies.delete("sdc_oauth_state")

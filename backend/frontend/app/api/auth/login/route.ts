@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 import {
   entraConfig,
   authorizeEndpoint,
@@ -24,10 +23,23 @@ export async function GET() {
   url.searchParams.set("code_challenge", challenge)
   url.searchParams.set("state", state)
 
-  const jar = await cookies()
-  const shortLived = { httpOnly: true, sameSite: "lax" as const, path: "/", maxAge: 600 }
-  jar.set("sdc_pkce_verifier", verifier, shortLived)
-  jar.set("sdc_oauth_state", state, shortLived)
+  // Both cookies are set on the response that is actually returned, not
+  // through the next/headers jar. Writes to the jar do not reliably attach to
+  // a NextResponse constructed separately, and when they are silently lost
+  // the callback finds no state to compare against and every login fails
+  // with state_mismatch.
+  const response = NextResponse.redirect(url)
 
-  return NextResponse.redirect(url)
+  const shortLived = {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 600,
+    secure: process.env.NODE_ENV === "production",
+  }
+
+  response.cookies.set("sdc_pkce_verifier", verifier, shortLived)
+  response.cookies.set("sdc_oauth_state", state, shortLived)
+
+  return response
 }

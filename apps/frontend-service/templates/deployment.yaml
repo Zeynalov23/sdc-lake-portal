@@ -34,6 +34,10 @@ spec:
               value: "0.0.0.0"
             - name: DATA_SERVICE_URL
               value: {{ .Values.dataServiceUrl | quote }}
+            # Redirects are built from this, never from the incoming request:
+            # behind the NLB the request URL carries the pod's own address.
+            - name: APP_BASE_URL
+              value: {{ .Values.appBaseUrl | quote }}
             - name: ENTRA_TENANT_ID
               value: {{ .Values.entra.tenantId | quote }}
             - name: ENTRA_CLIENT_ID

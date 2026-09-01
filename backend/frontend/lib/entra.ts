@@ -16,6 +16,15 @@ export const entraConfig = {
   postLogoutUri:     process.env.ENTRA_POST_LOGOUT_URI ?? "http://localhost:3000",
 }
 
+// Redirects must be built from a known public base, never from req.url.
+// Behind the NLB the request URL carries the pod's own address - and since
+// Next.js standalone is started with HOSTNAME=0.0.0.0 so that port-forward
+// works, that address is literally 0.0.0.0:3000. Redirecting to it sends the
+// browser somewhere it cannot reach.
+export function appBaseUrl(): string {
+  return process.env.APP_BASE_URL ?? "http://localhost:3000"
+}
+
 export function authorizeEndpoint(): URL {
   return new URL(
     `https://login.microsoftonline.com/${entraConfig.tenantId}/oauth2/v2.0/authorize`,

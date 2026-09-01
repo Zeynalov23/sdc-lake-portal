@@ -12,6 +12,10 @@ replicas: 1
 # needs no ingress of its own.
 dataServiceUrl: http://data-service.app.svc.cluster.local
 
+# The public origin. Used to build redirect URLs, because the request URL seen
+# by Next.js behind the load balancer is the pod's own address.
+appBaseUrl: https://portal.sdc-lake.jobnode.io
+
 entra:
   # Tenant and client id are identifiers, not secrets - both appear in every
   # login redirect URL in the browser.
