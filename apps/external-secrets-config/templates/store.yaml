@@ -16,14 +16,6 @@ spec:
     aws:
       service: SecretsManager
       region: {{ .Values.region }}
-      auth:
-        # No credentials here. The operator's pod gets them from Pod Identity,
-        # and the SDK picks them up from the environment - the same mechanism
-        # the application services use.
-        jwt:
-          serviceAccountRef:
-            name: external-secrets
-            namespace: external-secrets
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
