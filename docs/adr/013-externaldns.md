@@ -25,7 +25,11 @@ records whose TXT marker matches. Without that it could not distinguish its own
 records from ones created by hand.
 
 The owner id is `sdclake-platform-dev`: stable across rebuilds, so a new
-cluster adopts yesterday's records rather than orphaning them. It is not
+cluster adopts yesterday's records rather than orphaning them. **Verified on
+2026-09-01**: after a teardown and rebuild, the new NLB had a different
+hostname, and ExternalDNS recognised the existing records as its own from the
+TXT markers and repointed them in place. It also correctly refused to touch
+the ACM validation record, which has no owner marker. It is not
 unique per cluster — a second cluster with the same id would claim the same
 records and the two would fight, each overwriting the other. The `-dev` suffix
 exists so that adding a second environment is an obvious change rather than a
