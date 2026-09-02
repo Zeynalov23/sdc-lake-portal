@@ -1,0 +1,4 @@
+apiVersion: v2
+name: external-secrets-config
+description: Where secrets come from, and which ones are synced into the cluster
+version: 0.1.0

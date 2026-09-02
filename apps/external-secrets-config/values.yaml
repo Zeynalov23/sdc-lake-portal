@@ -1,0 +1,21 @@
+region: eu-west-1
+
+# Terraform creates these containers; the values are written by hand after
+# apply, because anything passed through Terraform ends up in the state file
+# in plaintext.
+secrets:
+  entraClientSecret: sdc-lake-dev/entra-client-secret
+
+# Where the synced Kubernetes Secret lands. The name and key match what the
+# frontend and data-service deployments already reference, so replacing the
+# hand-created secret with this one required no change to either chart.
+target:
+  namespace: app
+  secretName: sdc-lake-entra
+  secretKey: client-secret
+
+# How often the operator re-reads Secrets Manager. A rotated value reaches the
+# cluster within this window without anything being redeployed - though pods
+# already running keep the old value in their environment until they restart,
+# since env vars are read once at container start.
+refreshInterval: 1h

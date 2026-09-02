@@ -16,12 +16,11 @@ ever dropped, the container silently runs as root.
 Fix: `useradd -m -u 1000 appuser` and `USER 1000` in each Dockerfile, then
 restore `runAsNonRoot: true`.
 
-## The Entra client secret is not in git
+## ~~The Entra client secret is not in git~~ — resolved
 
-It is created with `kubectl create secret`, so it is the one object in the
-cluster that a rebuild does not restore. External Secrets Operator, backed by
-the Secrets Manager entry that Terraform already provisions, is the intended
-fix.
+Fixed by [ADR 014](014-external-secrets.md). External Secrets Operator syncs
+it from Secrets Manager, so a rebuilt cluster restores it without any manual
+step.
 
 ## Nothing validates the Pod Identity ↔ ServiceAccount agreement
 

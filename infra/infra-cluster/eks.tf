@@ -100,3 +100,13 @@ resource "aws_eks_pod_identity_association" "external_dns" {
   service_account = "external-dns"
   role_arn        = local.persistent_state.iam_role_external_dns_arn
 }
+
+# The service account name is the one the external-secrets chart creates by
+# default. As with every association, AWS stores it as a plain string and
+# never checks that it exists, so ArgoCD can create it afterwards.
+resource "aws_eks_pod_identity_association" "external_secrets" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "external-secrets"
+  service_account = "external-secrets"
+  role_arn        = local.persistent_state.iam_role_external_secrets_arn
+}

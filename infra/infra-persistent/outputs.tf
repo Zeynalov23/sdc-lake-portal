@@ -77,3 +77,11 @@ output "acm_certificate_arn" {
 output "iam_role_external_dns_arn" {
   value = aws_iam_role.external_dns.arn
 }
+
+output "iam_role_external_secrets_arn" {
+  value = aws_iam_role.external_secrets.arn
+}
+
+output "entra_client_secret_name" {
+  value = aws_secretsmanager_secret.entra_client_secret.name
+}

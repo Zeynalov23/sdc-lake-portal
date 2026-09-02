@@ -192,3 +192,40 @@ resource "aws_iam_role_policy" "external_dns" {
     ]
   })
 }
+
+# ---------------------------------------------------------------
+# External Secrets Operator role
+# ---------------------------------------------------------------
+resource "aws_iam_role" "external_secrets" {
+  name               = "${local.prefix}-external-secrets"
+  assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
+
+  tags = { Name = "${local.prefix}-external-secrets" }
+}
+
+resource "aws_iam_role_policy" "external_secrets" {
+  name = "external-secrets-policy"
+  role = aws_iam_role.external_secrets.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Named secrets only. A wildcard here would let a mistake in an
+        # ExternalSecret manifest pull any secret in the account into the
+        # cluster, where anyone with get on secrets in that namespace could
+        # read it.
+        Sid    = "ReadPlatformSecrets"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+        ]
+        Resource = [
+          aws_secretsmanager_secret.entra_client_secret.arn,
+          aws_secretsmanager_secret.app_config.arn,
+        ]
+      },
+    ]
+  })
+}

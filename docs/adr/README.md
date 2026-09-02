@@ -22,4 +22,5 @@ someone reading the repository a year later, including me.
 | [010](010-gateway-api-crds.md) | Gateway API CRDs come from the Envoy Gateway chart | Accepted |
 | [012](012-tls-at-the-load-balancer.md) | TLS terminates at the NLB, certificate ARN pinned | Accepted |
 | [013](013-externaldns.md) | DNS records maintained by ExternalDNS | Accepted |
+| [014](014-external-secrets.md) | Secrets synced from Secrets Manager by ESO | Accepted |
 | [011](011-known-gaps.md) | Known gaps and accepted risks | Living |

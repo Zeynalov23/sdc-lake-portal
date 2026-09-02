@@ -1,0 +1,47 @@
+{{/*
+A ClusterSecretStore rather than a namespaced SecretStore: it is defined once
+and referenced from any namespace. The alternative would mean one store per
+namespace, each repeating the same provider configuration.
+
+The trade is that a ClusterSecretStore is reachable from every namespace, so
+the IAM policy behind it is the only thing limiting what can be pulled into
+the cluster. That policy names two secrets explicitly for exactly this reason.
+*/}}
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: aws-secrets-manager
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: {{ .Values.region }}
+      auth:
+        # No credentials here. The operator's pod gets them from Pod Identity,
+        # and the SDK picks them up from the environment - the same mechanism
+        # the application services use.
+        jwt:
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: entra-client-secret
+  namespace: {{ .Values.target.namespace }}
+spec:
+  refreshInterval: {{ .Values.refreshInterval }}
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    # The operator creates and owns this Secret. It replaces the one that used
+    # to be created by hand after every cluster rebuild, which was the only
+    # object in the cluster not reproducible from this repository.
+    name: {{ .Values.target.secretName }}
+    creationPolicy: Owner
+  data:
+    - secretKey: {{ .Values.target.secretKey }}
+      remoteRef:
+        key: {{ .Values.secrets.entraClientSecret }}
