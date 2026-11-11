@@ -23,4 +23,6 @@ someone reading the repository a year later, including me.
 | [012](012-tls-at-the-load-balancer.md) | TLS terminates at the NLB, certificate ARN pinned | Accepted |
 | [013](013-externaldns.md) | DNS records maintained by ExternalDNS | Accepted |
 | [014](014-external-secrets.md) | Secrets synced from Secrets Manager by ESO | Accepted |
+| [015](015-observability.md) | kube-prometheus-stack from the upstream chart | Accepted |
+| [016](016-disruption-budgets.md) | Disruption budgets on the request-serving services | Accepted |
 | [011](011-known-gaps.md) | Known gaps and accepted risks | Living |

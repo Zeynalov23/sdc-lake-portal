@@ -5,7 +5,10 @@ image:
   repository: 339935010405.dkr.ecr.eu-west-1.amazonaws.com/sdc-lake-dev/frontend
   tag: latest
 
-replicas: 1
+# Two, so that the PodDisruptionBudget means something: a single replica
+# makes every node drain a user-visible outage, and no budget can create
+# availability that does not exist.
+replicas: 2
 
 # The browser talks to Next.js; Next.js talks to the data service inside the
 # cluster. Only the frontend is reachable from outside, so the data service

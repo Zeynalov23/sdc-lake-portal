@@ -1,0 +1,120 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  annotations:
+    # Wave 1, alongside the External Secrets operator. The chart brings its
+    # own CRDs - ServiceMonitor, PodMonitor, PrometheusRule - so anything of
+    # those kinds belongs in a later wave AND a separate Application, for the
+    # reason recorded in ADR 014: ArgoCD dry-runs every manifest in an
+    # Application before any wave runs, so a ServiceMonitor sitting beside the
+    # chart that defines its CRD fails validation before ordering can help.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    # Straight from the upstream repository. There is nothing to customise
+    # beyond values, so vendoring the chart would only create something to
+    # keep up to date - same reasoning as the External Secrets operator.
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    # Pinned, not a range: ArgoCD renders with `helm template`, so a range
+    # would let the rendered manifests change with no commit, and git would
+    # stop being the source of truth. Upgrades arrive as a PR.
+    targetRevision: "PIN-ME"
+    helm:
+      values: |
+        # --- The control plane is not ours to scrape ------------------
+        # These four jobs target components that run on the control plane.
+        # On EKS that plane is managed by AWS and its endpoints are not
+        # reachable from the nodes, so leaving them enabled produces
+        # TargetDown alerts that fire permanently for things that are in
+        # fact working. kube-proxy runs on the nodes, but the EKS addon
+        # binds its metrics port to 127.0.0.1, so it is unreachable too.
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeProxy:
+          enabled: false
+
+        prometheus:
+          prometheusSpec:
+            # No storageSpec, on purpose. The cluster is rebuilt from git
+            # every cycle (ADR 005) and holds no state; a PVC here would be
+            # the only exception, and `make down` would leave an EBS volume
+            # behind that Terraform never created and does not know about.
+            # Metrics are as disposable as the cluster that produced them.
+            retention: 24h
+            # By default the operator only selects monitors carrying this
+            # release's label, which would silently ignore any ServiceMonitor
+            # added by an application chart.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            resources:
+              requests:
+                cpu: 200m
+                memory: 1Gi
+              limits:
+                # Memory only, per ADR 009. Prometheus is the workload most
+                # likely to be OOM-killed by a cardinality mistake in someone
+                # else's metrics, so the limit is what stops that taking the
+                # node down with it.
+                memory: 2Gi
+
+        alertmanager:
+          # Installed, but no receiver is wired up: there is nowhere to send
+          # an alert yet, so rules fire and are visible in the UI only.
+          # Recorded as a known gap in ADR 011.
+          alertmanagerSpec:
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 256Mi
+
+        grafana:
+          # Deliberately not published through the Gateway. Reached with
+          #   kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+          # which means the default admin password never leaves the cluster.
+          # Publishing it would need the password in Secrets Manager behind an
+          # ExternalSecret, the same way the Entra client secret is handled.
+          service:
+            type: ClusterIP
+          persistence:
+            enabled: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+
+        prometheusOperator:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Unlike the application namespaces, this one is not created by
+      # Terraform - the chart is upstream and self-contained, so it owns its
+      # own namespace the way the External Secrets operator does.
+      - CreateNamespace=true
+      # The CRDs this chart ships are larger than the 256kB that the
+      # last-applied-configuration annotation can hold, so a client-side
+      # apply fails outright. Server-side apply has no such limit.
+      - ServerSideApply=true
