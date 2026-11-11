@@ -1,0 +1,20 @@
+# maxUnavailable, not minAvailable.
+#
+# minAvailable set to the replica count permits zero voluntary disruptions:
+# ALLOWED DISRUPTIONS sits at 0 and every eviction is refused, so a node
+# drain retries forever rather than being constrained. maxUnavailable also
+# stays correct when the replica count changes, which minAvailable does not.
+#
+# This governs voluntary disruption only - drains, upgrades, consolidation -
+# because PDBs gate the eviction subresource. A rollout deletes pods directly
+# and never consults this; node-pressure eviction by the kubelet does not
+# either.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: data-service
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: data-service

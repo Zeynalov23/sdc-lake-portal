@@ -1,0 +1,16 @@
+# See the data-service budget for why this is maxUnavailable rather than
+# minAvailable.
+#
+# This budget is only meaningful because the frontend now runs two replicas.
+# On a single replica a PDB is either useless (maxUnavailable: 1 permits the
+# only pod to go) or harmful (minAvailable: 1 blocks every drain forever).
+# The fix for a single-replica workload is a second replica, not a budget.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-service
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: frontend-service
