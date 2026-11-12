@@ -1,0 +1,46 @@
+# Scales on requests per second, not CPU.
+#
+# The data service spends most of its time waiting on S3 and DynamoDB, so a
+# saturated pod can sit at low CPU while its request queue grows. CPU
+# utilisation is also measured as a percentage OF THE REQUEST, which means
+# changing the resource request silently changes the scaling threshold
+# without anyone touching the HPA. Request rate has neither problem: it is a
+# direct measure of work arriving.
+#
+# This is only possible because prometheus-adapter serves the metric through
+# the custom metrics API; metrics-server alone offers CPU and memory and
+# nothing else.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: data-service
+  namespace: app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: data-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          # Averaged across pods: scale out when the mean pod is handling
+          # more than 20 requests a second. A starting guess, not a measured
+          # one - there is no production traffic to derive it from, and it
+          # should be revisited against real numbers.
+          type: AverageValue
+          averageValue: "20"
+  behavior:
+    scaleUp:
+      # React immediately. Being slow to scale up costs an outage.
+      stabilizationWindowSeconds: 0
+    scaleDown:
+      # Wait five minutes of sustained low load. Being slow to scale down
+      # costs a few minutes of extra pods, which is the cheaper mistake.
+      # The asymmetry is deliberate, and it is what stops the pod count
+      # oscillating around a threshold.
+      stabilizationWindowSeconds: 300

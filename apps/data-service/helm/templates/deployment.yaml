@@ -4,7 +4,12 @@ metadata:
   name: data-service
   namespace: app
 spec:
-  replicas: 2
+  # No replicas field, deliberately. The HorizontalPodAutoscaler owns this
+  # number now. Leaving it here would mean ArgoCD (selfHeal: true) writing 2
+  # while the HPA writes whatever load demands - each reverting the other
+  # every few seconds, with the pod count oscillating for as long as both
+  # are running. Omitting the field is cleaner than an ignoreDifferences
+  # rule, because it removes the conflict instead of hiding it.
   selector:
     matchLabels:
       app: data-service

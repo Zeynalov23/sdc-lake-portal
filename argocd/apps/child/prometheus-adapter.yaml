@@ -1,0 +1,68 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-adapter
+  namespace: argocd
+  annotations:
+    # Wave 2: it queries the Prometheus installed in wave 1. It does not hard
+    # depend on the ordering - the adapter simply returns errors until
+    # Prometheus answers, then recovers - but registering an APIService that
+    # cannot serve makes `kubectl get --raw /apis/custom.metrics.k8s.io` fail
+    # confusingly in the meantime.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-adapter
+    targetRevision: "5.4.0"
+    helm:
+      values: |
+        # The Prometheus installed by the kube-prometheus-stack Application.
+        # ArgoCD uses the Application name as the Helm release name, so the
+        # release is "monitoring" and the chart names its service
+        # <release>-kube-prometheus-prometheus.
+        prometheus:
+          url: http://monitoring-kube-prometheus-prometheus.monitoring.svc
+          port: 9090
+
+        # Replaces the chart's default rules entirely. The defaults expose a
+        # large set of cAdvisor-derived metrics that nothing here asks for,
+        # and every rule costs a query against Prometheus on each API call.
+        rules:
+          default: false
+          custom:
+            # Turns http_requests_total into a per-pod rate, served through
+            # the custom metrics API as pods/http_requests_per_second.
+            - seriesQuery: 'http_requests_total{namespace!="",pod!=""}'
+              resources:
+                overrides:
+                  # Maps the Prometheus labels onto Kubernetes objects, which
+                  # is what lets an HPA ask for "this Deployment's pods".
+                  namespace:
+                    resource: namespace
+                  pod:
+                    resource: pod
+              name:
+                matches: "^http_requests_total$"
+                as: "http_requests_per_second"
+              # The window is 2m rather than 5m: the HPA reads this every 15
+              # seconds, and a five-minute average lags a traffic spike badly
+              # enough that the scale-up arrives after the incident.
+              metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>,handler!="/health"}[2m])) by (<<.GroupBy>>)'
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

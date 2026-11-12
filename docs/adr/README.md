@@ -26,4 +26,5 @@ someone reading the repository a year later, including me.
 | [015](015-observability.md) | kube-prometheus-stack from the upstream chart | Accepted |
 | [016](016-disruption-budgets.md) | Disruption budgets on the request-serving services | Accepted |
 | [017](017-red-metrics.md) | RED metrics for the data service | Accepted |
+| [018](018-autoscaling-on-request-rate.md) | HPA on request rate, not CPU | Accepted |
 | [011](011-known-gaps.md) | Known gaps and accepted risks | Living |
