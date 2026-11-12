@@ -1,0 +1,4 @@
+apiVersion: v2
+name: monitoring-config
+description: ServiceMonitors and alert rules for the application services
+version: 0.1.0

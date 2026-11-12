@@ -22,7 +22,7 @@ spec:
     # Pinned, not a range: ArgoCD renders with `helm template`, so a range
     # would let the rendered manifests change with no commit, and git would
     # stop being the source of truth. Upgrades arrive as a PR.
-    targetRevision: "PIN-ME"
+    targetRevision: "93.2.2"
     helm:
       values: |
         # --- The control plane is not ours to scrape ------------------

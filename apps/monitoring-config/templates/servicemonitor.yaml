@@ -1,0 +1,22 @@
+# Tells the Prometheus operator to scrape the data service.
+#
+# This is a separate Application from the chart that installs Prometheus, in
+# a later sync wave, for the reason in ADR 014: ArgoCD dry-runs every manifest
+# in an Application before any wave runs, so a ServiceMonitor sitting beside
+# the chart that defines its CRD fails validation before ordering can help.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: data-service
+  namespace: app
+spec:
+  selector:
+    # Matches the Service's own labels, not the pods'.
+    matchLabels:
+      app: data-service
+  endpoints:
+    - port: http
+      path: /metrics
+      # Every 30s. Faster buys little - the alerts below all average over
+      # five minutes - and costs a sample per series per scrape.
+      interval: 30s

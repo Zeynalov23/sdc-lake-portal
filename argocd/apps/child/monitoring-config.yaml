@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-config-app
+  namespace: argocd
+  annotations:
+    # Wave 2, after the kube-prometheus-stack Application in wave 1 has
+    # installed the ServiceMonitor and PrometheusRule CRDs. Same reasoning as
+    # the External Secrets split in ADR 014: waves order the apply within one
+    # Application, but ArgoCD dry-runs every manifest in an Application before
+    # any wave runs, so these objects cannot live beside the chart that
+    # defines their kinds.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Zeynalov23/sdc-lake-portal.git
+    targetRevision: main
+    path: apps/monitoring-config
+  destination:
+    server: https://kubernetes.default.svc
+    # The app namespace, not monitoring: these objects describe the services
+    # being watched and belong beside them. The operator watches every
+    # namespace, so where they live is an ownership decision rather than a
+    # technical one.
+    namespace: app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Terraform owns this namespace (ADR 004).
+      - CreateNamespace=false

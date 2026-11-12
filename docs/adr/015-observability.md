@@ -59,10 +59,12 @@ ignore a monitor added by an application chart. Setting the three
 `*SelectorNilUsesHelmValues` flags to false makes the operator watch the
 whole cluster.
 
-**Nothing application-level is instrumented yet.** This deploys the platform
+**Nothing application-level is instrumented here.** This deploys the platform
 metrics — nodes, pods, resource usage, Kubernetes object state — and no RED
 metrics for the services themselves. Request rate, error ratio and latency
 for the data service need a ServiceMonitor and an instrumented application,
 and that is a separate change: the CRDs have to exist before any
 ServiceMonitor can be validated, which is the same wave-and-Application
 split described in ADR 014.
+
+That gap is closed for the data service in [ADR 017](017-red-metrics.md).

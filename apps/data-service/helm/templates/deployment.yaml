@@ -60,9 +60,18 @@ kind: Service
 metadata:
   name: data-service
   namespace: app
+  labels:
+    # A ServiceMonitor selects SERVICES by their labels, not pods by theirs.
+    # spec.selector below picks the pods; this label is what lets the
+    # ServiceMonitor pick this Service.
+    app: data-service
 spec:
   selector:
     app: data-service
   ports:
-    - port: 80
+    # Named, because a ServiceMonitor selects the port by name. An unnamed
+    # port can only be scraped by number, which breaks the moment the port
+    # changes.
+    - name: http
+      port: 80
       targetPort: 8000

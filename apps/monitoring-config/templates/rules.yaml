@@ -1,0 +1,67 @@
+# RED alerts for the data service: rate, errors, duration.
+#
+# Everything here alerts on a symptom a user would notice, not on a cause.
+# There is deliberately no rule on CPU or memory usage: a container sitting
+# at 90% of its memory limit is usually a runtime doing what it was told,
+# and paging on it teaches people that alerts are noise.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: data-service
+  namespace: app
+spec:
+  groups:
+    - name: data-service.red
+      rules:
+        - alert: DataServiceHighErrorRate
+          # A ratio, not a count. Fifty errors a second is meaningless
+          # without the denominator, and a count-based threshold fires
+          # constantly at high traffic and never at low traffic.
+          expr: |
+            sum(rate(http_requests_total{handler!="/health",status="5xx",job="data-service"}[5m]))
+            /
+            sum(rate(http_requests_total{handler!="/health",job="data-service"}[5m]))
+            > 0.01
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: "data-service is returning 5xx for more than 1% of requests"
+            description: "Sustained for five minutes. Check recent deploys first, then the pods' logs."
+
+        - alert: DataServiceHighLatency
+          # by (le) is load-bearing: le is the histogram bucket boundary, and
+          # aggregating without it collapses the whole distribution into one
+          # number. The query does not fail, it just returns nonsense.
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{handler!="/health",job="data-service"}[5m])) by (le)
+            ) > 1
+          for: 10m
+          labels:
+            severity: page
+          annotations:
+            summary: "data-service p99 latency is above one second"
+            description: "Presigned URL generation and DynamoDB reads are the usual suspects."
+
+        - alert: DataServiceTargetDown
+          # Scrape failure is itself a signal, and one a push-based system
+          # could not give: silence from a target is indistinguishable from
+          # a healthy target with nothing to say.
+          expr: up{job="data-service"} == 0
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: "Prometheus cannot scrape data-service"
+
+        - alert: DataServiceNoReadyReplicas
+          # Comes from kube-state-metrics, not from the application: if the
+          # pods are gone there is nothing left to scrape, so the alert above
+          # cannot distinguish "down" from "never existed".
+          expr: kube_deployment_status_replicas_ready{deployment="data-service",namespace="app"} == 0
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: "data-service has no ready replicas"
