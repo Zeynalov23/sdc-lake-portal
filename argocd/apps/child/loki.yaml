@@ -1,0 +1,113 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    # Wave 1, with the rest of the monitoring stack. Alloy in wave 2 writes
+    # to it, but nothing breaks if Loki is late: Alloy retries, and the only
+    # cost of being slow here is a gap in the first minute of logs.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    # The community repository, not grafana.github.io/helm-charts. The OSS
+    # chart moved here in March 2026; the one still published under grafana
+    # is maintained for Grafana Enterprise Logs.
+    repoURL: https://grafana-community.github.io/helm-charts
+    chart: loki
+    targetRevision: "21.4.3"
+    helm:
+      values: |
+        deploymentMode: Monolithic
+
+        loki:
+          auth_enabled: false
+
+          # Not optional. The chart ships schemaConfig empty and a real
+          # install has to supply one; without it Loki falls back to a test
+          # schema meant for playing with, backed by the local filesystem.
+          schemaConfig:
+            configs:
+              - from: "2026-01-01"
+                store: tsdb
+                object_store: s3
+                schema: v13
+                index:
+                  prefix: index_
+                  period: 24h
+
+          storage:
+            type: s3
+            bucketNames:
+              chunks: sdc-lake-dev-loki
+              ruler: sdc-lake-dev-loki
+            s3:
+              region: eu-west-1
+              # No keys. Credentials come from the Pod Identity association
+              # in infra-cluster; the SDK finds them in the environment and
+              # does not care where they came from.
+
+          limits_config:
+            retention_period: 720h
+            # Rejects a stream carrying more label combinations than this.
+            # Labels are Loki's index, so an unbounded label value does to
+            # Loki what it does to Prometheus - except the damage is chunk
+            # fragmentation rather than memory.
+            max_label_names_per_series: 15
+
+          compactor:
+            retention_enabled: true
+            delete_request_store: s3
+
+        singleBinary:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          persistence:
+            # The write-ahead log only. Chunks go to S3, so this holds
+            # seconds of data, not history, and is expendable with the node.
+            enabled: true
+            size: 5Gi
+
+        serviceAccount:
+          create: true
+          # Must match the Pod Identity association.
+          name: loki
+
+        # Everything below is off because Monolithic mode does not use it.
+        # The chart enables these regardless of mode, and the defaults are
+        # the single biggest trap in installing it: chunksCache alone asks
+        # for 8Gi of memcached, which on a small cluster sits Pending - or
+        # now, makes Karpenter launch a large instance to satisfy it.
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        write:
+          replicas: 0
+        read:
+          replicas: 0
+        backend:
+          replicas: 0
+
+        # Self-monitoring deploys a second Loki and a Grafana Agent to watch
+        # the first one. Useful at scale, absurd here.
+        lokiCanary:
+          enabled: false
+        test:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

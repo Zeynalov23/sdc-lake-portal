@@ -1,0 +1,119 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+  annotations:
+    # Wave 2: Loki should exist first so the first push has somewhere to go.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "1.16.0"
+    helm:
+      values: |
+        # Alloy, not Promtail: Promtail reached end of life in March 2026
+        # and Alloy is its replacement.
+        controller:
+          type: daemonset
+
+        alloy:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+
+          configMap:
+            content: |-
+              // Find every pod in the cluster.
+              discovery.kubernetes "pods" {
+                role = "pod"
+              }
+
+              // Only this node's pods. Each DaemonSet instance reads its
+              // own node, so without this every one of them would tail
+              // every pod in the cluster.
+              discovery.relabel "local_pods" {
+                targets = discovery.kubernetes.pods.targets
+
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_node_name"]
+                  regex         = sys.env("HOSTNAME")
+                  action        = "keep"
+                }
+
+                // These four become the index. Everything else in a log
+                // line is searched at query time, which is the whole
+                // trade Loki makes: cheap storage, labels kept small.
+                // A request id must never become a label - it would make
+                // one stream per request.
+                rule {
+                  source_labels = ["__meta_kubernetes_namespace"]
+                  target_label  = "namespace"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_name"]
+                  target_label  = "pod"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_container_name"]
+                  target_label  = "container"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_label_app"]
+                  target_label  = "app"
+                }
+              }
+
+              // Reads container logs through the Kubernetes API rather than
+              // from files on the host. Slightly more load on the API
+              // server, and it avoids host mounts entirely - which matters
+              // because Karpenter's nodes run Bottlerocket.
+              loki.source.kubernetes "pods" {
+                targets    = discovery.relabel.local_pods.output
+                forward_to = [loki.process.drop_noise.receiver]
+              }
+
+              loki.process "drop_noise" {
+                // Health probes at ten second intervals per pod would be
+                // most of the volume and none of the value.
+                stage.drop {
+                  expression = ".*(GET|HEAD) /health.*"
+                }
+
+                // The services emit JSON, so lift level out of the body
+                // and attach it. Lines that are not JSON pass through
+                // untouched rather than failing the pipeline.
+                stage.json {
+                  expressions = { level = "level" }
+                }
+
+                stage.labels {
+                  values = { level = "" }
+                }
+
+                forward_to = [loki.write.default.receiver]
+              }
+
+              loki.write "default" {
+                endpoint {
+                  url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+                }
+              }
+
+        # Reading pod logs through the API needs pods/log.
+        rbac:
+          create: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

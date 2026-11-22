@@ -79,6 +79,17 @@ spec:
                 memory: 256Mi
 
         grafana:
+          # Logs beside metrics. The payoff of running Loki rather than
+          # shipping to CloudWatch: the label sets match, so a latency
+          # spike on a dashboard leads straight to the logs from those
+          # pods in that window.
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              uid: loki
+              access: proxy
+              url: http://loki.monitoring.svc.cluster.local:3100
+
           # Deliberately not published through the Gateway. Reached with
           #   kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
           # which means the default admin password never leaves the cluster.

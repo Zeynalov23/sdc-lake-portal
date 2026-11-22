@@ -120,3 +120,14 @@ resource "aws_eks_pod_identity_association" "external_secrets" {
   service_account = "external-secrets"
   role_arn        = local.persistent_state.iam_role_external_secrets_arn
 }
+
+# Loki writes its chunks to the bucket in infra-persistent. The chart is
+# installed by ArgoCD and creates the service account; the association is an
+# AWS resource, so it belongs here. AWS stores it as plain strings and never
+# checks the service account exists, so the ordering does not matter.
+resource "aws_eks_pod_identity_association" "loki" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "monitoring"
+  service_account = "loki"
+  role_arn        = local.persistent_state.iam_role_loki_arn
+}

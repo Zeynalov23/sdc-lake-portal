@@ -5,6 +5,7 @@ Handles all data plane operations: list files, presigned URLs, space metadata.
 """
 import logging
 import os
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,16 +14,36 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 
 from src.routers import spaces, files, members, products
+from src.utils.obs_logging import configure_logging, request_id
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging()
 
 app = FastAPI(
     title="SDC Lake Data Service",
     version="0.1.0",
 )
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    """
+    Carry a request id across the whole call.
+
+    The frontend generates it and forwards it as a header, so one user
+    action produces log lines in both services that share a key. If the
+    header is absent - a direct call, or a probe - one is generated here,
+    so the field is never missing.
+    """
+    rid = request.headers.get("x-request-id") or uuid4().hex
+    token = request_id.set(rid)
+    try:
+        response = await call_next(request)
+    finally:
+        # Reset even on an exception, or the id leaks into whatever task
+        # reuses this context next.
+        request_id.reset(token)
+    response.headers["x-request-id"] = rid
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,

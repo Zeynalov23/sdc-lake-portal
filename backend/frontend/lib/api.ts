@@ -1,4 +1,4 @@
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { config } from "./config"
 
 export class AuthError extends Error {}
@@ -8,9 +8,13 @@ export class AuthError extends Error {}
 // ---------------------------------------------------------------
 async function dataHeaders(): Promise<HeadersInit> {
   const idToken = (await cookies()).get("sdc_id_token")?.value
+  // Set by middleware.ts on the inbound request. Forwarding it is what
+  // makes one user action a single searchable thing across both services.
+  const requestId = (await headers()).get("x-request-id")
   return {
     "Content-Type": "application/json",
     ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    ...(requestId ? { "x-request-id": requestId } : {}),
   }
 }
 

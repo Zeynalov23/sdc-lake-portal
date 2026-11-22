@@ -26,11 +26,9 @@ import boto3
 import boto3.dynamodb.types
 
 from src.processors import space
+from src.utils.obs_logging import configure_logging, request_id
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 _SQS_QUEUE_URL = os.environ["SQS_QUEUE_URL"]
@@ -96,6 +94,10 @@ def run() -> None:
             _touch_heartbeat()
 
             for message in response.get("Messages", []):
+                # The SQS message id is this service's correlation key:
+                # every line emitted while handling one message carries it,
+                # so a redelivery is traceable as the same work.
+                token = request_id.set(message.get("MessageId", ""))
                 try:
                     _handle(message)
                     _sqs.delete_message(
@@ -106,6 +108,8 @@ def run() -> None:
                     logger.exception(
                         "Failed to process message - leaving it queued for retry"
                     )
+                finally:
+                    request_id.reset(token)
 
         except Exception:
             logger.exception("SQS polling error - retrying in 5s")

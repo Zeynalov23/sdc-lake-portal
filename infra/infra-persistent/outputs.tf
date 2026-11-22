@@ -90,3 +90,12 @@ output "github_actions_role_arn" {
   description = "Store as the AWS_CI_ROLE_ARN repository variable in GitHub"
   value       = aws_iam_role.github_actions.arn
 }
+
+output "iam_role_loki_arn" {
+  description = "Role assumed by Loki through Pod Identity"
+  value       = aws_iam_role.loki.arn
+}
+
+output "loki_bucket_name" {
+  value = aws_s3_bucket.loki.id
+}

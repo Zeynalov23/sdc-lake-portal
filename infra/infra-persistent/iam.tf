@@ -229,3 +229,44 @@ resource "aws_iam_role_policy" "external_secrets" {
     ]
   })
 }
+
+# ---------------------------------------------------------------
+# Loki
+# ---------------------------------------------------------------
+resource "aws_iam_role" "loki" {
+  name               = "${local.prefix}-loki"
+  assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
+
+  tags = { Name = "${local.prefix}-loki" }
+}
+
+resource "aws_iam_role_policy" "loki" {
+  name = "loki-policy"
+  role = aws_iam_role.loki.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadWriteChunks"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+        ]
+        Resource = "${aws_s3_bucket.loki.arn}/*"
+      },
+      {
+        # Loki lists the bucket on startup and while compacting. Scoped to
+        # this bucket only: a list permission on "*" would let a
+        # misconfigured deployment enumerate every bucket in the account,
+        # including the space buckets.
+        Sid      = "ListBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.loki.arn
+      },
+    ]
+  })
+}

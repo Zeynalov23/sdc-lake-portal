@@ -29,4 +29,5 @@ someone reading the repository a year later, including me.
 | [018](018-autoscaling-on-request-rate.md) | HPA on request rate, not CPU | Accepted |
 | [019](019-ci-pipeline.md) | CI builds and tags, ArgoCD deploys | Accepted |
 | [020](020-karpenter.md) | Karpenter provisions nodes, the node group is a floor | Accepted |
+| [021](021-logging.md) | Structured logs to Loki, chunks in S3 | Accepted |
 | [011](011-known-gaps.md) | Known gaps and accepted risks | Living |
