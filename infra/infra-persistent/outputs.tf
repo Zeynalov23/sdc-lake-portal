@@ -85,3 +85,8 @@ output "iam_role_external_secrets_arn" {
 output "entra_client_secret_name" {
   value = aws_secretsmanager_secret.entra_client_secret.name
 }
+
+output "github_actions_role_arn" {
+  description = "Store as the AWS_CI_ROLE_ARN repository variable in GitHub"
+  value       = aws_iam_role.github_actions.arn
+}

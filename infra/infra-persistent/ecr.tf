@@ -15,7 +15,11 @@ resource "aws_ecr_repository" "services" {
   for_each = toset(local.ecr_repos)
 
   name                 = "${local.prefix}/${each.key}"
-  image_tag_mutability = "MUTABLE"
+  # IMMUTABLE: a tag, once pushed, can never point at different bytes. CI
+  # tags every image with the commit SHA, so this makes the tag in git an
+  # exact, permanent reference to what is running. It is also what stops a
+  # rebuild of the same SHA silently changing production.
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true

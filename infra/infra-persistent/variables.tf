@@ -21,3 +21,9 @@ variable "dns_zone_name" {
   type = string
   default = "sdc-lake.jobnode.io"
 }
+
+variable "github_repository" {
+  description = "owner/name of the repository allowed to assume the CI role"
+  type        = string
+  default     = "Zeynalov23/sdc-lake-portal"
+}

@@ -1,0 +1,179 @@
+# Build changed services, push them to ECR tagged with the commit SHA, then
+# write that SHA into the Helm values so ArgoCD has something to sync.
+#
+# The deploy step is a commit, not a kubectl call: this workflow never holds
+# cluster credentials and never talks to the cluster. ArgoCD pulls.
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/build-and-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  # Mint the OIDC token that AWS exchanges for the CI role. Without this the
+  # token is never issued and the credential step fails.
+  id-token: write
+  # Push the tag bump back to main.
+  contents: write
+
+# One run at a time. Two pushes in quick succession would otherwise race to
+# commit the tag bump, and the loser is rejected on push.
+concurrency:
+  group: build-and-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_NAMESPACE: sdc-lake-dev
+
+jobs:
+  detect:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      any: ${{ steps.detect.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CHANGED="ALL"
+          else
+            BASE="${{ github.event.before }}"
+            # Zeroes on a new branch, and a force-push can leave a SHA that
+            # no longer exists. Either way, fall back to building everything
+            # rather than silently building nothing.
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+              CHANGED="ALL"
+            else
+              CHANGED=$(git diff --name-only "$BASE" "${{ github.sha }}")
+            fi
+          fi
+
+          SERVICES=()
+          for s in data-service provisioning-service frontend; do
+            if [ "$CHANGED" = "ALL" ] || printf '%s\n' "$CHANGED" | grep -q "^backend/${s}/"; then
+              SERVICES+=("$s")
+            fi
+          done
+
+          if [ ${#SERVICES[@]} -eq 0 ]; then
+            echo "services=[]" >> "$GITHUB_OUTPUT"
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "No service directories changed."
+          else
+            JSON=$(printf '%s\n' "${SERVICES[@]}" | jq -R . | jq -sc .)
+            echo "services=$JSON" >> "$GITHUB_OUTPUT"
+            echo "any=true" >> "$GITHUB_OUTPUT"
+            echo "Building: $JSON"
+          fi
+
+  build:
+    name: Build ${{ matrix.service }}
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      # One broken service should not hide whether the others build.
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the role ARN is configured
+        run: |
+          if [ -z "${{ vars.AWS_CI_ROLE_ARN }}" ]; then
+            echo "::error::Repository variable AWS_CI_ROLE_ARN is not set."
+            echo "Run: terraform output github_actions_role_arn"
+            exit 1
+          fi
+
+      # A role ARN is not a secret - it grants nothing without a token this
+      # repository's workflows can mint - so it lives in a variable, where
+      # it stays readable in logs and in the settings UI.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.login.outputs.registry }}/${{ env.ECR_NAMESPACE }}/${{ matrix.service }}:${{ github.sha }}
+          # Layer cache in the Actions cache, so a dependency layer is not
+          # rebuilt on every commit that touches only application code.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # Without this, buildx publishes an image index with attestations
+          # rather than a plain manifest. ECR handles it, but it makes the
+          # repository harder to read and adds nothing here.
+          provenance: false
+
+  bump:
+    name: Write the tag into git
+    needs: [detect, build]
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Point the Helm values at this commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+
+          for s in $(echo '${{ needs.detect.outputs.services }}' | jq -r '.[]'); do
+            case "$s" in
+              frontend)             f="apps/frontend-service/values.yaml" ;;
+              data-service)         f="apps/data-service/helm/values.yaml" ;;
+              provisioning-service) f="apps/provisioning-service/helm/values.yaml" ;;
+              *) echo "::error::No values file mapped for $s"; exit 1 ;;
+            esac
+
+            # Anchored to the two-space indent under `image:`. Deliberately
+            # surgical: rewriting the file with a YAML tool would reflow the
+            # comments these values files carry.
+            sed -i -E "s|^(  tag: ).*$|\1\"${SHA}\"|" "$f"
+            grep -q "  tag: \"${SHA}\"" "$f" || { echo "::error::Failed to set tag in $f"; exit 1; }
+            echo "$f -> $SHA"
+          done
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "Values already at this SHA; nothing to commit."
+            exit 0
+          fi
+
+          git commit -am "Deploy ${{ github.sha }}"
+          # A push authenticated with GITHUB_TOKEN does not trigger workflows,
+          # so this commit cannot start another run. The path filter at the
+          # top would stop it anyway; both are deliberate.
+          git push
