@@ -33,6 +33,10 @@ module "vpc" {
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = "1"
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
+    # How Karpenter finds where to put nodes. Without this tag its
+    # subnetSelectorTerms match nothing and every NodeClaim fails with no
+    # obvious reason.
+    "karpenter.sh/discovery" = local.cluster_name
   }
 
   tags = {

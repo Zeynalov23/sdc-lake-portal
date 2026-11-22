@@ -1,0 +1,84 @@
+# What Karpenter is allowed to launch, and when it may take nodes away.
+#
+# A separate Application in a later sync wave, because these are custom
+# resources whose CRDs the Karpenter chart installs. ArgoCD dry-runs every
+# manifest in an Application before any wave runs, so they cannot sit beside
+# the thing that defines their kinds - the same split as ADR 014.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # Bottlerocket: a minimal host OS with no shell and no package manager,
+  # built for containers. Less to patch, and nothing to log into.
+  amiSelectorTerms:
+    - alias: bottlerocket@latest
+  role: {{ .Values.nodeIamRoleName }}
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName }}
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName }}
+  tags:
+    Name: {{ .Values.clusterName }}-karpenter
+    karpenter.sh/discovery: {{ .Values.clusterName }}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      requirements:
+        # Deliberately broad. The point of Karpenter over a node group is
+        # that it picks an instance to fit the pending pods, so constraining
+        # it to one family throws that away. These bounds only keep it to
+        # current-generation general purpose hardware at sane sizes.
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4", "8"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        # Spot first: Karpenter picks the cheapest instance that fits, which
+        # is almost always spot. Interruption is handled - the module in
+        # karpenter.tf creates the SQS queue that gives roughly two minutes'
+        # warning, and Karpenter drains the node in that window.
+        # on-demand stays in the list so there is somewhere to go when spot
+        # capacity for a shape runs out.
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+      # A node is replaced after a week even if nothing else prompts it, so
+      # AMI patches land without anyone remembering to roll nodes.
+      expireAfter: 168h
+  limits:
+    # A ceiling on what Karpenter may ever launch. Without it, one pod with
+    # an absurd resource request - or a runaway HPA - provisions until the
+    # account's quota stops it. On a personal account that is the difference
+    # between a bad afternoon and a bad invoice.
+    cpu: "48"
+    memory: 192Gi
+  disruption:
+    # Removes empty nodes and replaces underutilised ones with something
+    # smaller. This is continuous, not a maintenance event, which is why
+    # PodDisruptionBudgets stopped being optional (ADR 016).
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 2m
+    budgets:
+      # At most one node disrupted at a time. The default is 10%, which on a
+      # small cluster rounds to one anyway, but saying it makes the intent
+      # survive the cluster getting bigger.
+      - nodes: "1"

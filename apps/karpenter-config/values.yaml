@@ -1,0 +1,6 @@
+# Both values are deterministic from the Terraform naming in
+# infra-cluster/locals.tf and karpenter.tf. They are repeated here because
+# ArgoCD cannot read Terraform state; if the project or environment name
+# changes, these change with it.
+clusterName: sdc-lake-dev
+nodeIamRoleName: sdc-lake-dev-karpenter-node

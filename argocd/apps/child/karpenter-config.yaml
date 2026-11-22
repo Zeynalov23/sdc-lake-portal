@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter-config
+  namespace: argocd
+  annotations:
+    # Wave 1. The Karpenter chart is installed by Terraform before ArgoCD
+    # ever syncs, so the CRDs exist by now; the wave keeps it ahead of the
+    # application workloads that may need the capacity it provisions.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Zeynalov23/sdc-lake-portal.git
+    targetRevision: main
+    path: apps/karpenter-config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

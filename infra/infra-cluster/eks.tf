@@ -57,12 +57,22 @@ module "eks" {
 
       labels = {
         nodegroup = "main"
+        # Karpenter's own pods are pinned here, so that it never runs on a
+        # node it could decide to remove. See karpenter.tf.
+        "karpenter.sh/controller" = "true"
       }
 
       tags = {
         Name = "${local.prefix}-node"
       }
     }
+  }
+
+  # The security group Karpenter attaches to the nodes it creates. Exactly
+  # one security group in the account should carry this tag, or the
+  # selector is ambiguous.
+  node_security_group_tags = {
+    "karpenter.sh/discovery" = local.cluster_name
   }
 
   tags = {
